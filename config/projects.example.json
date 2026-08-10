@@ -1,0 +1,16 @@
+{
+  "database": "var/control-plane.sqlite3",
+  "projects": [
+    {
+      "id": "director-agent",
+      "name": "Director Agent",
+      "kind": "business_agent",
+      "owner": "Project Owner",
+      "root": "/absolute/path/to/director",
+      "ledger": "docs/2026-08/TASK_QUEUE.md",
+      "status": "docs/2026-08/PROJECT_STATUS.json",
+      "knowledge_roots": ["docs"],
+      "enabled_agents": ["knowledge", "observer", "release"]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "director-control-plane"
+version = "0.1.0"
+description = "Read-only control plane for AI agent projects"
+requires-python = ">=3.9"
+
+[project.scripts]
+director-control-plane = "control_plane.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
