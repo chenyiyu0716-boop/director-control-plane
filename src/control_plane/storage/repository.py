@@ -643,7 +643,8 @@ class Repository:
         allowed = {
             "project", "agent_run", "finding", "review_item", "check_result", "release_report",
             "control_task", "control_task_transition", "task_decision", "feishu_inbox_event",
-            "owner_decision", "requirement_intake", "audit_event",
+            "owner_decision", "requirement_intake", "executor_profile", "project_baseline",
+            "task_lease", "dispatcher_operation", "audit_event",
         }
         if table not in allowed:
             raise ValueError("unsupported table")

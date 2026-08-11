@@ -13,7 +13,7 @@
 - Feishu owner actions arrive through the official SDK long connection, are restricted by an open_id allowlist, expire, and are deduplicated by both event_id and nonce.
 - Feishu callbacks store only an allowlisted structured payload. Full messages, unknown form fields and credentials are never persisted.
 - Requirement and direction changes require a stored preview plus a second confirmation; confirmation cannot mutate a running task or create a READY task.
-- Executor identities in `allowedExecutors` are policy metadata only; TASK-015 does not implement task claiming or command execution.
+- Executor identities are enforced by TASK-018 against both the task allowlist and an executor profile's project/risk ceiling. The Dispatcher grants a lease, not filesystem or command authority.
 - Secrets, tokens, cookies, environment dumps and database contents must not enter findings or audit events.
 
 ## Not yet approved for production exposure

@@ -14,6 +14,9 @@ ROUTES: Dict[str, str] = {
     "/api/reviews": "review_item",
     "/api/checks": "check_result",
     "/api/releases": "release_report",
+    "/api/executors": "executor_profile",
+    "/api/baselines": "project_baseline",
+    "/api/leases": "task_lease",
 }
 
 

@@ -19,6 +19,9 @@ python3 -m control_plane.main --config config/projects.local.json task history T
 python3 -m control_plane.main --config config/projects.local.json task decide TASK-015 --facts config/decision-facts.example.json --expected-version 1 --actor codex
 python3 -m control_plane.main --config config/projects.local.json task decisions TASK-015
 python3 -m control_plane.main --config config/projects.local.json task render --project control-panel --output var/TASKS.md
+python3 -m control_plane.main --config config/projects.local.json dispatch register-executor workbuddy-hy3 --projects control-panel --max-risk low
+python3 -m control_plane.main --config config/projects.local.json dispatch set-baseline control-panel COMMIT_SHA --actor planner
+python3 -m control_plane.main --config config/projects.local.json dispatch next workbuddy-hy3
 python3 -m control_plane.main --config config/projects.local.json serve
 ```
 
@@ -30,6 +33,10 @@ contract; `config/task.example.json` is a ready-to-copy example.
 Decision facts use `config/decision-facts.schema.json`. A decision is applied only to a `DRAFT` or `BLOCKED`
 task and requires its expected version. `modelAdvisory` is optional, stored separately, and cannot alter the
 outcome. Read-only evidence is available at `/api/decisions` and `/api/tasks/{id}/decisions`.
+
+Dispatcher mutations are local CLI/service operations. Register a project baseline before claiming. Executors
+must use a fresh request ID per semantic operation and reuse it only to retry that same operation. Read-only
+state is available at `/api/executors`, `/api/baselines` and `/api/leases`. Completion enters REVIEW, never DONE.
 
 The API binds to `127.0.0.1:8765` by default. Do not bind it to a public interface until authentication,
 request auditing and deployment security have been implemented and reviewed.

@@ -17,7 +17,7 @@ ALLOWED_TRANSITIONS = {
     TaskState.NEEDS_DECISION: {TaskState.READY, TaskState.BLOCKED},
     TaskState.READY: {TaskState.CLAIMED, TaskState.BLOCKED},
     TaskState.CLAIMED: {TaskState.RUNNING, TaskState.READY, TaskState.BLOCKED, TaskState.FAILED},
-    TaskState.RUNNING: {TaskState.REVIEW, TaskState.BLOCKED, TaskState.FAILED},
+    TaskState.RUNNING: {TaskState.REVIEW, TaskState.READY, TaskState.BLOCKED, TaskState.FAILED},
     TaskState.REVIEW: {TaskState.DONE, TaskState.READY, TaskState.BLOCKED, TaskState.FAILED},
     TaskState.BLOCKED: {TaskState.DRAFT, TaskState.NEEDS_DECISION, TaskState.READY},
     TaskState.FAILED: {TaskState.READY, TaskState.BLOCKED},

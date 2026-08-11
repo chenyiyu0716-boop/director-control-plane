@@ -200,6 +200,41 @@ CREATE TABLE IF NOT EXISTS requirement_intake (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS executor_profile (
+  id TEXT PRIMARY KEY,
+  project_ids_json TEXT NOT NULL,
+  max_risk TEXT NOT NULL CHECK(max_risk IN ('low', 'medium', 'high', 'critical')),
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_baseline (
+  project_id TEXT PRIMARY KEY REFERENCES project(id),
+  baseline_ref TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_lease (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES control_task(id),
+  executor_id TEXT NOT NULL REFERENCES executor_profile(id),
+  baseline_ref TEXT NOT NULL,
+  claimed_version INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'failed', 'expired')),
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS dispatcher_operation (
+  request_id TEXT PRIMARY KEY,
+  operation TEXT NOT NULL,
+  executor_id TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_run_project_started ON agent_run(project_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_project_status ON review_item(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_finding_fingerprint ON finding(fingerprint);
@@ -211,3 +246,5 @@ CREATE INDEX IF NOT EXISTS idx_task_decision_outcome_created ON task_decision(ou
 CREATE INDEX IF NOT EXISTS idx_feishu_inbox_status_received ON feishu_inbox_event(status, received_at);
 CREATE INDEX IF NOT EXISTS idx_owner_decision_task_created ON owner_decision(task_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_requirement_intake_project_status ON requirement_intake(project_id, status, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_lease_one_active ON task_lease(task_id) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_task_lease_executor_status ON task_lease(executor_id, status, expires_at);

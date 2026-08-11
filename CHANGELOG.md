@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### TASK-018 — Lease-based Executor Dispatcher
+
+- Added executor profiles with project and risk ceilings, registered project baselines, and exclusive task leases.
+- Added idempotent next/claim/heartbeat/complete/fail service and CLI operations with atomic concurrency control.
+- Added expired-lease recovery, stale-baseline rejection and read-only executor/baseline/lease APIs.
+- Completion stops at REVIEW so TASK-021 evidence validation remains authoritative for DONE.
+
 ### TASK-017 — Feishu Owner Control Channel
 
 - Added an owner-only Feishu `card.action.trigger` inbox using the official long-connection SDK.

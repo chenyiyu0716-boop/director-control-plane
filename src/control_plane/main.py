@@ -7,7 +7,7 @@ from typing import Iterable
 from .api.server import serve
 from .config import ProjectConfig, load_settings
 from .domain.models import AgentType, DecisionOutcome, TaskState
-from .services import DecisionPolicyEngine, Orchestrator, TaskRegistry, decision_facts_from_dict, task_from_dict
+from .services import DecisionPolicyEngine, LeaseDispatcher, Orchestrator, TaskRegistry, decision_facts_from_dict, task_from_dict
 from .storage import Repository
 
 
@@ -68,6 +68,39 @@ def build_parser() -> argparse.ArgumentParser:
     task_render = task_commands.add_parser("render")
     task_render.add_argument("--project")
     task_render.add_argument("--output", required=True)
+    dispatch = subcommands.add_parser("dispatch")
+    dispatch_commands = dispatch.add_subparsers(dest="dispatch_command", required=True)
+    executor = dispatch_commands.add_parser("register-executor")
+    executor.add_argument("executor_id")
+    executor.add_argument("--projects", required=True)
+    executor.add_argument("--max-risk", required=True, choices=["low", "medium", "high", "critical"])
+    baseline = dispatch_commands.add_parser("set-baseline")
+    baseline.add_argument("project_id")
+    baseline.add_argument("baseline_ref")
+    baseline.add_argument("--actor", required=True)
+    next_task = dispatch_commands.add_parser("next")
+    next_task.add_argument("executor_id")
+    next_task.add_argument("--project")
+    claim = dispatch_commands.add_parser("claim")
+    claim.add_argument("task_id")
+    claim.add_argument("executor_id")
+    claim.add_argument("baseline_ref")
+    claim.add_argument("--expected-version", required=True, type=int)
+    claim.add_argument("--request-id", required=True)
+    claim.add_argument("--ttl", type=int)
+    heartbeat = dispatch_commands.add_parser("heartbeat")
+    heartbeat.add_argument("lease_id")
+    heartbeat.add_argument("executor_id")
+    heartbeat.add_argument("--request-id", required=True)
+    heartbeat.add_argument("--ttl", type=int)
+    for command_name in ("complete", "fail"):
+        finish = dispatch_commands.add_parser(command_name)
+        finish.add_argument("lease_id")
+        finish.add_argument("executor_id")
+        finish.add_argument("baseline_ref")
+        finish.add_argument("--request-id", required=True)
+        if command_name == "fail":
+            finish.add_argument("--reason", required=True)
     return parser
 
 
@@ -121,6 +154,26 @@ def main(argv=None) -> int:
             return 0
         registry.render_to_file(Path(args.output), args.project)
         print(args.output)
+        return 0
+    if args.command == "dispatch":
+        dispatcher = LeaseDispatcher(repository)
+        if args.dispatch_command == "register-executor":
+            result = dispatcher.register_executor(args.executor_id, args.projects.split(","), args.max_risk)
+        elif args.dispatch_command == "set-baseline":
+            result = dispatcher.set_project_baseline(args.project_id, args.baseline_ref, args.actor)
+        elif args.dispatch_command == "next":
+            result = dispatcher.next(args.executor_id, args.project)
+        elif args.dispatch_command == "claim":
+            result = dispatcher.claim(args.task_id, args.executor_id, args.baseline_ref,
+                                      args.expected_version, args.request_id, args.ttl)
+        elif args.dispatch_command == "heartbeat":
+            result = dispatcher.heartbeat(args.lease_id, args.executor_id, args.request_id, args.ttl)
+        elif args.dispatch_command == "complete":
+            result = dispatcher.complete(args.lease_id, args.executor_id, args.baseline_ref, args.request_id)
+        else:
+            result = dispatcher.fail(args.lease_id, args.executor_id, args.baseline_ref,
+                                     args.request_id, args.reason)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     orchestrator = Orchestrator(repository)
     projects = selected_projects(settings.projects, args.project)
