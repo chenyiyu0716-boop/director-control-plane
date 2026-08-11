@@ -29,6 +29,7 @@ PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json task render --output var/TASKS.md
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch register-executor workbuddy-hy3 --projects control-panel --max-risk low
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch set-baseline control-panel COMMIT_SHA --actor planner
+PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch get-baseline control-panel
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch next workbuddy-hy3
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json serve
 ```

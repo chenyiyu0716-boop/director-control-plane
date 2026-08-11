@@ -78,6 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
     baseline.add_argument("project_id")
     baseline.add_argument("baseline_ref")
     baseline.add_argument("--actor", required=True)
+    get_baseline = dispatch_commands.add_parser("get-baseline")
+    get_baseline.add_argument("project_id")
     next_task = dispatch_commands.add_parser("next")
     next_task.add_argument("executor_id")
     next_task.add_argument("--project")
@@ -161,6 +163,8 @@ def main(argv=None) -> int:
             result = dispatcher.register_executor(args.executor_id, args.projects.split(","), args.max_risk)
         elif args.dispatch_command == "set-baseline":
             result = dispatcher.set_project_baseline(args.project_id, args.baseline_ref, args.actor)
+        elif args.dispatch_command == "get-baseline":
+            result = dispatcher.get_project_baseline(args.project_id)
         elif args.dispatch_command == "next":
             result = dispatcher.next(args.executor_id, args.project)
         elif args.dispatch_command == "claim":

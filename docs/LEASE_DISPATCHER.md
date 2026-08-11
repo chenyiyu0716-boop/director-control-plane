@@ -5,6 +5,8 @@ TASK-018 provides the exclusive claim boundary between READY tasks and external 
 ## Contract
 
 - `next` returns the first eligible READY task after project, task allowlist and maximum-risk checks.
+- `get-baseline` returns the Planner-registered project baseline without reading SQLite directly. Executors must
+  compare it with Git HEAD and stop without claim/fail when they differ.
 - `claim` atomically creates one active lease and moves READY to CLAIMED. A project baseline must already be registered and match the claim.
 - The first `heartbeat` moves CLAIMED to RUNNING and extends the lease.
 - `complete` requires an active RUNNING lease and an unchanged baseline, then moves the task to REVIEW. TASK-021 decides whether REVIEW may become DONE.

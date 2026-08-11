@@ -64,6 +64,16 @@ class LeaseDispatcher:
             )
         return {"project_id": project_id, "baseline_ref": baseline_ref, "updated_by": actor}
 
+    def get_project_baseline(self, project_id: str) -> Dict[str, Any]:
+        with self.repository.connect(timeout=1.0) as connection:
+            row = connection.execute(
+                "SELECT project_id, baseline_ref, updated_by, updated_at FROM project_baseline WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+        if not row:
+            raise BaselineConflictError("project baseline is not registered")
+        return dict(row)
+
     def next(self, executor_id: str, project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         now = self._now()
         with self.repository.connect(timeout=1.0) as connection:

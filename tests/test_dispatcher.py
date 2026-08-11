@@ -32,6 +32,7 @@ class DispatcherTest(unittest.TestCase):
         self.dispatcher.register_executor("workbuddy-hy3", ["panel"], "low")
         self.dispatcher.register_executor("codex", ["panel", "director"], "critical")
         self.dispatcher.set_project_baseline("panel", "base-001", "planner")
+        self.assertEqual(self.dispatcher.get_project_baseline("panel")["baseline_ref"], "base-001")
 
     def tearDown(self):
         self.temp.cleanup()
@@ -56,6 +57,13 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(self.repository.get_task("TASK-LOW")["state"], "CLAIMED")
         with self.assertRaises(ExecutorUnauthorizedError):
             self.dispatcher.claim("TASK-HIGH", "workbuddy-hy3", "base-001", 2, "claim-high")
+
+    def test_get_baseline_is_read_only_and_rejects_unknown_project_baseline(self):
+        before = self.dispatcher.get_project_baseline("panel")
+        after = self.dispatcher.get_project_baseline("panel")
+        self.assertEqual(before, after)
+        with self.assertRaises(BaselineConflictError):
+            self.dispatcher.get_project_baseline("director")
 
     def test_claim_is_idempotent_and_only_one_concurrent_executor_wins(self):
         task = self.ready_task()
