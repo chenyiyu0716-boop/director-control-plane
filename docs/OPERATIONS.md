@@ -34,6 +34,22 @@ outcome. Read-only evidence is available at `/api/decisions` and `/api/tasks/{id
 The API binds to `127.0.0.1:8765` by default. Do not bind it to a public interface until authentication,
 request auditing and deployment security have been implemented and reviewed.
 
+## Feishu Owner channel
+
+Install `requirements-feishu.txt` in the runtime environment, copy the example owner allowlist to
+`config/feishu-control.local.json`, and export `FEISHU_APP_ID`, `FEISHU_APP_SECRET`,
+`CONTROL_PLANE_CONFIG` and `CONTROL_PLANE_FEISHU_CONFIG`. Start `scripts/run_feishu_control.py` as a
+separate service. The `.local.json` file and environment credentials must never be committed.
+
+The process uses the official SDK long connection and only handles `card.action.trigger`. It acknowledges
+after a small structured inbox write and processes the event on a background worker. Inspect decisions at
+`/api/owner-decisions` and direction inputs at `/api/requirement-intakes`. If the worker stops after a
+business write but before updating the inbox status, restarting it safely recognizes the applied event.
+
+Before enabling formal cards, verify all of these with a non-production task: an allowlisted approval,
+an unauthorized operator, the same callback twice, an expired callback, a direction preview, and a
+direction confirmation. Never send App Secret or tokens through chat.
+
 ## Scheduling
 
 Use `scripts/run_daily_check.sh` from a system scheduler. The script is deterministic and does not
@@ -42,6 +58,6 @@ path. A failed run remains visible as a failed `AgentRun`; do not retry indefini
 
 ## Backup and recovery
 
-The only mutable runtime asset is `var/control-plane.sqlite3`. Stop the API before copying it.
+The only mutable runtime asset is `var/control-plane.sqlite3`. Stop the API and Feishu worker before copying it.
 Restoring the database does not modify any connected project. Deleting the database removes Control
 Plane history only and must still be treated as an audited operator action.

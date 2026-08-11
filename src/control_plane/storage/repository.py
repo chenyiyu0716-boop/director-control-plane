@@ -43,8 +43,8 @@ class Repository:
         self.database = Path(database)
         self.database.parent.mkdir(parents=True, exist_ok=True)
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(str(self.database))
+    def connect(self, timeout: float = 5.0) -> sqlite3.Connection:
+        connection = sqlite3.connect(str(self.database), timeout=timeout)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
@@ -411,6 +411,223 @@ class Repository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def receive_feishu_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        with self.connect(timeout=0.25) as connection:
+            existing = connection.execute(
+                "SELECT status FROM feishu_inbox_event WHERE event_id = ? OR nonce = ?",
+                (event["event_id"], event["nonce"]),
+            ).fetchone()
+            if existing:
+                return {"accepted": True, "duplicate": True, "status": existing["status"]}
+            try:
+                connection.execute(
+                    """INSERT INTO feishu_inbox_event
+                       (event_id, event_type, operator_id, nonce, expires_at, message_ref, payload_json,
+                        status, received_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+                    (event["event_id"], event["event_type"], event["operator_id"], event["nonce"],
+                     event["expires_at"], event.get("message_ref"), json_text(event["payload"]), utc_now()),
+                )
+            except sqlite3.IntegrityError:
+                duplicate = connection.execute(
+                    "SELECT status FROM feishu_inbox_event WHERE event_id = ? OR nonce = ?",
+                    (event["event_id"], event["nonce"]),
+                ).fetchone()
+                if duplicate:
+                    return {"accepted": True, "duplicate": True, "status": duplicate["status"]}
+                raise
+            self._audit(
+                connection, "feishu-inbox", "feishu.event_received", "feishu_inbox_event",
+                event["event_id"], None, {"status": "pending", "event_type": event["event_type"]},
+                request_id=event["event_id"],
+            )
+        return {"accepted": True, "duplicate": False, "status": "pending"}
+
+    def list_pending_feishu_events(self, limit: int = 100) -> List[Dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM feishu_inbox_event WHERE status = 'pending' ORDER BY received_at, rowid LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [self._feishu_event_record(row) for row in rows]
+
+    def finish_feishu_event(self, event_id: str, status: str, result: Dict[str, Any]) -> None:
+        if status not in {"processed", "rejected"}:
+            raise ValueError("invalid Feishu event status")
+        with self.connect() as connection:
+            updated = connection.execute(
+                """UPDATE feishu_inbox_event SET status = ?, result_json = ?, processed_at = ?
+                   WHERE event_id = ? AND status = 'pending'""",
+                (status, json_text(result), utc_now(), event_id),
+            )
+            if updated.rowcount != 1:
+                return
+            self._audit(
+                connection, "feishu-control", "feishu.event_{}".format(status), "feishu_inbox_event",
+                event_id, {"status": "pending"}, {"status": status, "result": result},
+                request_id="finish:{}".format(event_id),
+            )
+
+    def apply_owner_decision(self, event_id: str, task_id: str, expected_version: int,
+                             action: str, operator_id: str, reason: str) -> Dict[str, Any]:
+        if action not in {"approve", "reject", "request_changes"}:
+            raise ValueError("unsupported owner decision action")
+        now = utc_now()
+        to_state = TaskState.READY if action == "approve" else TaskState.BLOCKED
+        result_version = expected_version + 1
+        decision_id = str(uuid.uuid4())
+        with self.connect() as connection:
+            current = connection.execute("SELECT state, version FROM control_task WHERE id = ?", (task_id,)).fetchone()
+            if not current:
+                raise TaskNotFoundError("task is not registered: {}".format(task_id))
+            if current["state"] != TaskState.NEEDS_DECISION.value or int(current["version"]) != expected_version:
+                raise TaskVersionConflictError(
+                    "expected NEEDS_DECISION v{}, found {} v{}".format(
+                        expected_version, current["state"], current["version"]
+                    )
+                )
+            if to_state is TaskState.READY:
+                blocked = connection.execute(
+                    """SELECT dependency.id, dependency.state FROM control_task_dependency link
+                       JOIN control_task dependency ON dependency.id = link.depends_on_task_id
+                       WHERE link.task_id = ? AND dependency.state <> 'DONE' ORDER BY dependency.id""",
+                    (task_id,),
+                ).fetchall()
+                if blocked:
+                    raise TaskDependencyBlockedError("dependencies are not DONE")
+            connection.execute(
+                """UPDATE control_task SET state = ?, version = ?, updated_at = ?
+                   WHERE id = ? AND state = 'NEEDS_DECISION' AND version = ?""",
+                (to_state.value, result_version, now, task_id, expected_version),
+            )
+            try:
+                connection.execute(
+                    """INSERT INTO owner_decision
+                       (id, task_id, task_version, action, operator_id, reason, event_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (decision_id, task_id, expected_version, action, operator_id, reason, event_id, now),
+                )
+                connection.execute(
+                    """INSERT INTO control_task_transition
+                       (id, task_id, from_state, to_state, actor, reason, previous_version,
+                        result_version, request_id, created_at)
+                       VALUES (?, ?, 'NEEDS_DECISION', ?, ?, ?, ?, ?, ?, ?)""",
+                    (str(uuid.uuid4()), task_id, to_state.value, "feishu-owner:{}".format(operator_id),
+                     "owner {}: {}".format(action, reason), expected_version, result_version,
+                     "feishu:{}".format(event_id), now),
+                )
+            except sqlite3.IntegrityError as error:
+                raise TaskVersionConflictError("owner decision event was already applied") from error
+            self._audit(
+                connection, "feishu-owner:{}".format(operator_id), "owner.decision_applied",
+                "control_task", task_id,
+                {"state": "NEEDS_DECISION", "version": expected_version},
+                {"state": to_state.value, "version": result_version, "decision_id": decision_id},
+                request_id="owner:{}".format(event_id),
+            )
+        return {"decision_id": decision_id, "task": self.get_task(task_id)}
+
+    def create_requirement_intake(self, event_id: str, project_id: str, kind: str, objective: str,
+                                  requested_priority: Optional[str], operator_id: str,
+                                  preview: Dict[str, Any]) -> Dict[str, Any]:
+        intake_id = str(uuid.uuid4())
+        now = utc_now()
+        with self.connect() as connection:
+            if not connection.execute("SELECT id FROM project WHERE id = ?", (project_id,)).fetchone():
+                raise TaskNotFoundError("project is not registered: {}".format(project_id))
+            connection.execute(
+                """INSERT INTO requirement_intake
+                   (id, project_id, kind, objective, requested_priority, operator_id, source_event_id,
+                    status, preview_json, version, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'PREVIEW_PENDING', ?, 1, ?, ?)""",
+                (intake_id, project_id, kind, objective, requested_priority, operator_id, event_id,
+                 json_text(preview), now, now),
+            )
+            self._audit(
+                connection, "feishu-owner:{}".format(operator_id), "requirement.preview_created",
+                "requirement_intake", intake_id, None,
+                {"status": "PREVIEW_PENDING", "project_id": project_id, "kind": kind},
+                request_id="intake:{}".format(event_id),
+            )
+        return self.get_requirement_intake(intake_id)
+
+    def confirm_requirement_intake(self, event_id: str, intake_id: str, expected_version: int,
+                                   operator_id: str, confirm: bool) -> Dict[str, Any]:
+        now = utc_now()
+        status = "CONFIRMED" if confirm else "REJECTED"
+        with self.connect() as connection:
+            current = connection.execute("SELECT status, version FROM requirement_intake WHERE id = ?", (intake_id,)).fetchone()
+            if not current:
+                raise TaskNotFoundError("requirement intake is not registered: {}".format(intake_id))
+            if current["status"] != "PREVIEW_PENDING" or int(current["version"]) != expected_version:
+                raise TaskVersionConflictError("requirement intake version or state changed")
+            connection.execute(
+                """UPDATE requirement_intake SET status = ?, version = ?, confirmed_event_id = ?, updated_at = ?
+                   WHERE id = ? AND status = 'PREVIEW_PENDING' AND version = ?""",
+                (status, expected_version + 1, event_id, now, intake_id, expected_version),
+            )
+            self._audit(
+                connection, "feishu-owner:{}".format(operator_id), "requirement.{}".format(status.lower()),
+                "requirement_intake", intake_id,
+                {"status": "PREVIEW_PENDING", "version": expected_version},
+                {"status": status, "version": expected_version + 1},
+                request_id="intake-confirm:{}".format(event_id),
+            )
+        return self.get_requirement_intake(intake_id)
+
+    def get_requirement_intake(self, intake_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM requirement_intake WHERE id = ?", (intake_id,)).fetchone()
+        return self._requirement_record(row) if row else None
+
+    def list_requirement_intakes(self, project_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        if project_id:
+            query = "SELECT * FROM requirement_intake WHERE project_id = ? ORDER BY created_at DESC LIMIT ?"
+            values = (project_id, limit)
+        else:
+            query = "SELECT * FROM requirement_intake ORDER BY created_at DESC LIMIT ?"
+            values = (limit,)
+        with self.connect() as connection:
+            rows = connection.execute(query, values).fetchall()
+        return [self._requirement_record(row) for row in rows]
+
+    def list_owner_decisions(self, task_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        if task_id:
+            query = "SELECT * FROM owner_decision WHERE task_id = ? ORDER BY created_at DESC LIMIT ?"
+            values = (task_id, limit)
+        else:
+            query = "SELECT * FROM owner_decision ORDER BY created_at DESC LIMIT ?"
+            values = (limit,)
+        with self.connect() as connection:
+            return [dict(row) for row in connection.execute(query, values).fetchall()]
+
+    def get_owner_decision_by_event(self, event_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM owner_decision WHERE event_id = ?", (event_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_requirement_intake_by_event(self, event_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM requirement_intake WHERE source_event_id = ? OR confirmed_event_id = ?",
+                (event_id, event_id),
+            ).fetchone()
+        return self._requirement_record(row) if row else None
+
+    @staticmethod
+    def _feishu_event_record(row: sqlite3.Row) -> Dict[str, Any]:
+        record = dict(row)
+        record["payload"] = json.loads(record.pop("payload_json"))
+        result = record.pop("result_json")
+        record["result"] = json.loads(result) if result else None
+        return record
+
+    @staticmethod
+    def _requirement_record(row: sqlite3.Row) -> Dict[str, Any]:
+        record = dict(row)
+        record["preview"] = json.loads(record.pop("preview_json"))
+        return record
+
     def _task_record(self, connection: sqlite3.Connection, row: sqlite3.Row) -> Dict[str, Any]:
         record = dict(row)
         for field_name in ("scope_json", "acceptance_json", "allowed_executors_json", "workspace_roots_json"):
@@ -425,7 +642,8 @@ class Repository:
     def list_rows(self, table: str, limit: int = 100) -> List[Dict[str, Any]]:
         allowed = {
             "project", "agent_run", "finding", "review_item", "check_result", "release_report",
-            "control_task", "control_task_transition", "task_decision", "audit_event",
+            "control_task", "control_task_transition", "task_decision", "feishu_inbox_event",
+            "owner_decision", "requirement_intake", "audit_event",
         }
         if table not in allowed:
             raise ValueError("unsupported table")

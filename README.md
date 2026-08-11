@@ -14,6 +14,7 @@ AI Agent 运维总控系统 —— 独立于业务 Agent 的控制面，统一�
 - SQLite 保存 Project、AgentRun、Finding、CheckResult、KnowledgeCandidate、ReviewItem、ReleaseReport 和 AuditEvent。
 - Task Registry 保存任务定义、依赖、版本化状态和完整迁移历史，并可生成确定性的 Markdown 人类视图。
 - Decision Policy 使用版本化确定性规则把任务判定为 READY、NEEDS_DECISION 或 BLOCKED；模型建议不能覆盖安全门禁。
+- 飞书 Owner Control Channel 通过企业自建应用长连接接收结构化决策与方向调整；白名单、过期、nonce 和 event_id 阻止越权与重放。
 - 本地只读 API 提供 `/health`、`/api/projects`、`/api/runs`、`/api/findings`、`/api/reviews`、`/api/checks`、`/api/releases`、`/api/tasks`。
 
 ### 本地启动
@@ -29,6 +30,19 @@ PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json
 ```
 
 服务默认只监听 `127.0.0.1:8765`，没有外网写入入口。
+
+飞书入口单独运行，真实配置和凭据不入库：
+
+```bash
+python3 -m pip install -r requirements-feishu.txt
+cp config/feishu-control.example.json config/feishu-control.local.json
+FEISHU_APP_ID=... FEISHU_APP_SECRET=... \
+CONTROL_PLANE_CONFIG=config/projects.local.json \
+CONTROL_PLANE_FEISHU_CONFIG=config/feishu-control.local.json \
+PYTHONPATH=src python3 scripts/run_feishu_control.py
+```
+
+该入口只订阅新版 `card.action.trigger`。回调先落入结构化 inbox 并立即响应，后台线程再执行；不保存完整飞书会话。需求和方向调整先生成 `PREVIEW_PENDING` 记录，确认后也只进入 Planner review，不直接修改运行中任务或创建 READY 任务。
 
 ### 测试
 
@@ -47,6 +61,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 - `docs/DIRECTOR_CONTROL_PLANE_V0.1.md` —— v0.1 开发方案（架构 / 三 Agent / 数据结构 / 验收）。
 - `docs/DEPENDENCY_SELF_HEALING_SYSTEM.md` —— 冻结需求：依赖自愈系统（基础设施层，首发案例 KESU 静默降级）。
 - `docs/DECISION_POLICY.md` —— TASK-016 确定性决策规则、模型边界与审计证据。
+- `docs/FEISHU_CONTROL_CHANNEL.md` —— TASK-017 Owner 控制通道、卡片字段、安全边界和启用步骤。
 
 ## 冻结需求 Backlog
 

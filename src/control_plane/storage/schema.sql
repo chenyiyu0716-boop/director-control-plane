@@ -159,6 +159,47 @@ CREATE TABLE IF NOT EXISTS task_decision (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS feishu_inbox_event (
+  event_id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  operator_id TEXT NOT NULL,
+  nonce TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  message_ref TEXT,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'processed', 'rejected')),
+  result_json TEXT,
+  received_at TEXT NOT NULL,
+  processed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS owner_decision (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES control_task(id),
+  task_version INTEGER NOT NULL,
+  action TEXT NOT NULL CHECK(action IN ('approve', 'reject', 'request_changes')),
+  operator_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  event_id TEXT NOT NULL UNIQUE REFERENCES feishu_inbox_event(event_id),
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS requirement_intake (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES project(id),
+  kind TEXT NOT NULL CHECK(kind IN ('new_requirement', 'direction_change', 'priority_change', 'pause', 'resume', 'replan')),
+  objective TEXT NOT NULL,
+  requested_priority TEXT CHECK(requested_priority IS NULL OR requested_priority IN ('P0', 'P1', 'P2', 'P3')),
+  operator_id TEXT NOT NULL,
+  source_event_id TEXT NOT NULL UNIQUE REFERENCES feishu_inbox_event(event_id),
+  status TEXT NOT NULL CHECK(status IN ('PREVIEW_PENDING', 'CONFIRMED', 'REJECTED')),
+  preview_json TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
+  confirmed_event_id TEXT UNIQUE REFERENCES feishu_inbox_event(event_id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_run_project_started ON agent_run(project_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_project_status ON review_item(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_finding_fingerprint ON finding(fingerprint);
@@ -167,3 +208,6 @@ CREATE INDEX IF NOT EXISTS idx_control_task_dependency_target ON control_task_de
 CREATE INDEX IF NOT EXISTS idx_control_task_transition_task_created ON control_task_transition(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_task_decision_task_created ON task_decision(task_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_decision_outcome_created ON task_decision(outcome, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feishu_inbox_status_received ON feishu_inbox_event(status, received_at);
+CREATE INDEX IF NOT EXISTS idx_owner_decision_task_created ON owner_decision(task_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_requirement_intake_project_status ON requirement_intake(project_id, status, created_at DESC);
