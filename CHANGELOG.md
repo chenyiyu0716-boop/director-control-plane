@@ -16,3 +16,5 @@
 - Added atomic owner decisions for `NEEDS_DECISION` tasks with optimistic task-version checks.
 - Added requirement and direction intake previews plus separate confirmation; confirmation leaves active tasks unchanged and routes the record to Planner review.
 - Added read-only APIs for owner decisions and requirement intakes, operations documentation, and security tests.
+ Aligned Card JSON 2.0 controls with strict select, form-submit and callback-behavior schemas; added a private owner-only transport test card and sanitized callback diagnostics.
+ Live verification accepted exactly one allowlisted callback into `PREVIEW_PENDING` without creating a READY task or writing either managed project.

@@ -6,11 +6,41 @@ def _text(content: str) -> Dict[str, str]:
 
 
 def _button(label: str, button_type: str, value: Dict[str, Any]) -> Dict[str, Any]:
-    return {"tag": "button", "text": _text(label), "type": button_type, "value": value}
+    return {
+        "tag": "button",
+        "text": _text(label),
+        "type": button_type,
+        "behaviors": [{"type": "callback", "value": value}],
+    }
 
 
 def _submit_button(label: str, button_type: str, value: Dict[str, Any]) -> Dict[str, Any]:
-    return dict(_button(label, button_type, value), form_action_type="submit")
+    return {
+        "tag": "button", "text": _text(label), "type": button_type,
+        "value": value, "action_type": "form_submit",
+    }
+
+
+def build_callback_test_card(project_id: str, nonce: str, expires_at: str) -> Dict[str, Any]:
+    return {
+        "schema": "2.0",
+        "header": {"title": _text("Agent Operations Console · 回调联调")},
+        "body": {"elements": [
+            {"tag": "markdown", "content": (
+                "目标项目：**{}**\n\n本卡只验证新版回调、Owner 白名单与审计落盘。"
+                "点击后仅生成一条 P2 联调预览，不会创建 READY 任务。"
+            ).format(project_id)},
+            _button("验证私有控制通道", "primary", {
+                "command": "requirement_intake",
+                "project_id": project_id,
+                "kind": "direction_change",
+                "objective": "飞书控制通道联调测试",
+                "requested_priority": "P2",
+                "nonce": nonce,
+                "expires_at": expires_at,
+            }),
+        ]},
+    }
 
 
 def build_decision_card(task: Dict[str, Any], nonce: str, expires_at: str) -> Dict[str, Any]:
@@ -43,7 +73,8 @@ def build_requirement_card(project_id: str, nonce: str, expires_at: str) -> Dict
         "body": {"elements": [
             {"tag": "markdown", "content": "目标项目：**{}**\n提交后先生成影响预览，不会直接执行。".format(project_id)},
             {"tag": "form", "name": "requirement_intake", "elements": [
-                {"tag": "select_static", "name": "kind", "label": _text("调整类型"),
+                {"tag": "markdown", "content": "**调整类型**"},
+                {"tag": "select_static", "name": "kind",
                  "placeholder": _text("请选择"), "options": [
                      {"text": _text(label), "value": value} for value, label in [
                          ("new_requirement", "新增需求"), ("direction_change", "调整方向"),
@@ -53,7 +84,8 @@ def build_requirement_card(project_id: str, nonce: str, expires_at: str) -> Dict
                  ]},
                 {"tag": "input", "name": "objective", "label": _text("目标与原因"),
                  "placeholder": _text("说明希望改变什么、为什么")},
-                {"tag": "select_static", "name": "requested_priority", "label": _text("期望优先级（可选）"),
+                {"tag": "markdown", "content": "**期望优先级（可选）**"},
+                {"tag": "select_static", "name": "requested_priority",
                  "placeholder": _text("P0–P3"), "options": [
                      {"text": _text(value), "value": value} for value in ("P0", "P1", "P2", "P3")
                  ]},

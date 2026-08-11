@@ -40,6 +40,9 @@ TASK-017 为指定 Owner 提供独立于 WorkBuddy 的飞书控制入口。它�
 2. 从 `config/feishu-control.example.json` 创建被 git 忽略的 `.local.json`，只填写 Owner open_id。
 3. 将 App ID 和 App Secret 放入进程环境变量，禁止写入文件或日志。
 4. 安装 `requirements-feishu.txt` 后运行 `scripts/run_feishu_control.py`。
-5. 先发送测试卡验证白名单、重复提交、过期提交和决策留痕，再启用正式卡片。
+5. 使用 `scripts/send_feishu_test_card.py` 向 Owner Open ID 发送无表单联调卡，先验证新版
+   callback behavior、白名单和审计落盘，再启用正式表单卡片。
+6. Card JSON 2.0 的非表单按钮使用 `behaviors` 声明 callback；表单按钮使用
+   `action_type: form_submit`，不得混用两种交互声明。
 
 当前仓库提供可测试的适配器和运行入口，但不会自动创建飞书应用，也不会代填或提交真实凭据。

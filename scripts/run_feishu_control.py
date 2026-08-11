@@ -48,8 +48,17 @@ def main() -> None:
     threading.Thread(target=worker, name="feishu-control-worker", daemon=True).start()
 
     def handle_card_action(data: P2CardActionTrigger) -> P2CardActionTriggerResponse:
+        stage = "normalize"
         try:
             normalized = normalize_card_action(event_to_dict(data, lark))
+            print(
+                "Feishu callback received: event_id={} operator={} command={}".format(
+                    normalized["event_id"], normalized["operator_id"],
+                    normalized["payload"].get("command", "unknown"),
+                ),
+                flush=True,
+            )
+            stage = "inbox"
             acknowledgement = inbox.ingest(normalized)
             if acknowledgement["accepted"]:
                 content = "已接收，正在处理" if not acknowledgement["duplicate"] else "该操作已接收，请勿重复提交"
@@ -57,7 +66,13 @@ def main() -> None:
             else:
                 content = "当前账号没有控制权限"
                 toast_type = "error"
-        except Exception:
+        except Exception as error:
+            print(
+                "Feishu callback rejected at {}: {}".format(
+                    stage, type(error).__name__,
+                ),
+                flush=True,
+            )
             content = "请求格式无效，未执行任何操作"
             toast_type = "error"
         return P2CardActionTriggerResponse({"toast": {"type": toast_type, "content": content}})

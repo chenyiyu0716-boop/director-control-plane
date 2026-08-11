@@ -7,7 +7,8 @@ from pathlib import Path
 
 from control_plane.adapters.feishu import normalize_card_action
 from control_plane.adapters.feishu_cards import (
-    build_decision_card, build_intake_confirmation_card, build_requirement_card,
+    build_callback_test_card, build_decision_card, build_intake_confirmation_card,
+    build_requirement_card,
 )
 from control_plane.config import ProjectConfig
 from control_plane.domain.models import AgentType, TaskState
@@ -189,13 +190,30 @@ class FeishuControlTest(unittest.TestCase):
         task = self.register_task()
         decision = build_decision_card(task, "nonce-decision", "2026-08-12T00:00:00+08:00")
         decision_actions = decision["body"]["elements"][-1]["elements"][1:]
-        self.assertEqual({item["value"]["action"] for item in decision_actions}, {
+        decision_values = [item["value"] for item in decision_actions]
+        self.assertEqual({value["action"] for value in decision_values}, {
             "approve", "reject", "request_changes",
         })
-        self.assertTrue(all(item["value"]["task_version"] == task["version"] for item in decision_actions))
+        self.assertTrue(all(value["task_version"] == task["version"] for value in decision_values))
+        self.assertTrue(all(item["action_type"] == "form_submit" for item in decision_actions))
 
         requirement = build_requirement_card("panel", "nonce-intake", "2026-08-12T00:00:00+08:00")
-        self.assertEqual(requirement["body"]["elements"][-1]["elements"][-1]["value"]["command"], "requirement_intake")
+        requirement_elements = requirement["body"]["elements"][-1]["elements"]
+        submit = requirement_elements[-1]
+        selects = [item for item in requirement_elements if item["tag"] == "select_static"]
+        self.assertEqual(submit["value"]["command"], "requirement_intake")
+        self.assertEqual(submit["action_type"], "form_submit")
+        self.assertTrue(all("label" not in item for item in selects))
+        self.assertTrue(all(option["text"]["tag"] == "plain_text" for item in selects for option in item["options"]))
+
+        transport = build_callback_test_card(
+            "director-agent", "nonce-transport", "2026-08-12T00:00:00+08:00",
+        )
+        transport_button = transport["body"]["elements"][-1]
+        transport_value = transport_button["behaviors"][0]["value"]
+        self.assertEqual(transport_button["behaviors"][0]["type"], "callback")
+        self.assertEqual(transport_value["command"], "requirement_intake")
+        self.assertEqual(transport_value["project_id"], "director-agent")
 
         self.inbox.ingest(self.event("evt-card-intake", "requirement_intake", {
             "project_id": "panel", "kind": "pause", "objective": "暂停当前推进",
@@ -205,8 +223,9 @@ class FeishuControlTest(unittest.TestCase):
             intake, "nonce-confirm", "2026-08-12T00:00:00+08:00",
         )
         confirm_actions = confirmation["body"]["elements"][-2:]
-        self.assertEqual([item["value"]["confirm"] for item in confirm_actions], [True, False])
-        self.assertTrue(all(item["value"]["intake_version"] == 1 for item in confirm_actions))
+        confirm_values = [item["behaviors"][0]["value"] for item in confirm_actions]
+        self.assertEqual([value["confirm"] for value in confirm_values], [True, False])
+        self.assertTrue(all(value["intake_version"] == 1 for value in confirm_values))
 
 
 if __name__ == "__main__":
