@@ -9,6 +9,8 @@ TASK-018 provides the exclusive claim boundary between READY tasks and external 
 - The first `heartbeat` moves CLAIMED to RUNNING and extends the lease.
 - `complete` requires an active RUNNING lease and an unchanged baseline, then moves the task to REVIEW. TASK-021 decides whether REVIEW may become DONE.
 - `fail` moves CLAIMED or RUNNING to FAILED and preserves the reason in transition history.
+- Two consecutive executor-reported `fail` terminal operations disable that executor profile. A successful
+  `complete` resets the consecutive sequence; a Planner must explicitly re-register a disabled executor.
 - Expired active leases become `expired`; CLAIMED/RUNNING tasks return to READY at a new version and can be claimed again.
 
 Every mutation uses a request ID. Replaying the same operation returns the stored result; reusing its ID for a different operation is rejected. SQLite `BEGIN IMMEDIATE` plus a partial unique index ensures one active lease per task.

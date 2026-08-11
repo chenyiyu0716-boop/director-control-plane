@@ -113,7 +113,49 @@ class DispatcherTest(unittest.TestCase):
             failed_lease["lease_id"], "codex", "base-001", "fail", "tests failed",
         )
         self.assertEqual((failed["status"], failed["task_state"]), ("failed", "FAILED"))
+        self.assertEqual((failed["consecutive_failures"], failed["executor_enabled"]), (1, True))
         self.assertIn("tests failed", self.repository.list_task_transitions("TASK-FAIL")[-1]["reason"])
+
+    def test_two_consecutive_failures_disable_executor_and_complete_resets_streak(self):
+        first = self.ready_task("TASK-FAIL-ONE")
+        first_lease = self.dispatcher.claim(
+            first["id"], "workbuddy-hy3", "base-001", first["version"], "claim-fail-one",
+        )
+        first_result = self.dispatcher.fail(
+            first_lease["lease_id"], "workbuddy-hy3", "base-001", "fail-one", "bounded probe failed",
+        )
+        self.assertEqual((first_result["consecutive_failures"], first_result["executor_enabled"]), (1, True))
+
+        successful = self.ready_task("TASK-SUCCESS-RESET")
+        success_lease = self.dispatcher.claim(
+            successful["id"], "workbuddy-hy3", "base-001", successful["version"], "claim-success-reset",
+        )
+        self.dispatcher.heartbeat(success_lease["lease_id"], "workbuddy-hy3", "heartbeat-success-reset")
+        success_result = self.dispatcher.complete(
+            success_lease["lease_id"], "workbuddy-hy3", "base-001", "complete-success-reset",
+        )
+        self.assertEqual((success_result["consecutive_failures"], success_result["executor_enabled"]), (0, True))
+
+        second = self.ready_task("TASK-FAIL-TWO")
+        second_lease = self.dispatcher.claim(
+            second["id"], "workbuddy-hy3", "base-001", second["version"], "claim-fail-two",
+        )
+        second_result = self.dispatcher.fail(
+            second_lease["lease_id"], "workbuddy-hy3", "base-001", "fail-two", "bounded probe failed",
+        )
+        self.assertEqual((second_result["consecutive_failures"], second_result["executor_enabled"]), (1, True))
+
+        third = self.ready_task("TASK-FAIL-THREE")
+        third_lease = self.dispatcher.claim(
+            third["id"], "workbuddy-hy3", "base-001", third["version"], "claim-fail-three",
+        )
+        third_result = self.dispatcher.fail(
+            third_lease["lease_id"], "workbuddy-hy3", "base-001", "fail-three", "bounded probe failed again",
+        )
+        self.assertEqual((third_result["consecutive_failures"], third_result["executor_enabled"]), (2, False))
+        self.assertEqual(third_result["executor_disabled_reason"], "two consecutive executor failures")
+        with self.assertRaises(ExecutorUnauthorizedError):
+            self.dispatcher.next("workbuddy-hy3")
 
     def test_expired_lease_recovers_task_for_new_claim(self):
         task = self.ready_task()

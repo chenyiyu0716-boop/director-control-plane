@@ -183,10 +183,44 @@ class LeaseDispatcher:
             lease_status = "completed" if success else "failed"
             connection.execute("UPDATE task_lease SET status = ?, updated_at = ? WHERE id = ?",
                                (lease_status, now.isoformat(), lease_id))
+            profile_row = connection.execute(
+                "SELECT enabled, updated_at FROM executor_profile WHERE id = ?", (executor_id,)
+            ).fetchone()
+            previous_failures = self._consecutive_failures(
+                connection, executor_id, profile_row["updated_at"]
+            )
+            consecutive_failures = 0 if success else previous_failures + 1
+            executor_enabled = bool(profile_row["enabled"])
+            if not success and consecutive_failures >= 2:
+                executor_enabled = False
+                connection.execute(
+                    "UPDATE executor_profile SET enabled = 0, updated_at = ? WHERE id = ?",
+                    (now.isoformat(), executor_id),
+                )
             result = {"lease_id": lease_id, "status": lease_status, "task_id": task["id"],
-                      "task_state": target, "task_version": task["version"] + 1}
+                      "task_state": target, "task_version": task["version"] + 1,
+                      "consecutive_failures": consecutive_failures,
+                      "executor_enabled": executor_enabled}
+            if not executor_enabled:
+                result["executor_disabled_reason"] = "two consecutive executor failures"
             self._record_operation(connection, request_id, operation, executor_id, result)
             return result
+
+    @staticmethod
+    def _consecutive_failures(connection: sqlite3.Connection, executor_id: str,
+                              since: str) -> int:
+        rows = connection.execute(
+            """SELECT operation FROM dispatcher_operation
+               WHERE executor_id = ? AND operation IN ('complete', 'fail') AND created_at >= ?
+               ORDER BY created_at DESC""",
+            (executor_id, since),
+        ).fetchall()
+        count = 0
+        for row in rows:
+            if row["operation"] != "fail":
+                break
+            count += 1
+        return count
 
     def recover_expired(self) -> List[str]:
         with self.repository.connect(timeout=1.0) as connection:
