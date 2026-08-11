@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://director-control-plane.local/schemas/task.json",
+  "title": "Director Control Plane Task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "projectId",
+    "title",
+    "objective",
+    "scope",
+    "acceptance",
+    "priority",
+    "riskLevel",
+    "allowedExecutors",
+    "workspaceRoots",
+    "dependencies"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$" },
+    "projectId": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "objective": { "type": "string", "minLength": 1 },
+    "scope": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+    "acceptance": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+    "priority": { "enum": ["P0", "P1", "P2", "P3"] },
+    "riskLevel": { "enum": ["low", "medium", "high", "critical"] },
+    "allowedExecutors": {
+      "allOf": [
+        { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+        { "items": { "pattern": "^[a-z][a-z0-9-]*$" } }
+      ]
+    },
+    "workspaceRoots": { "$ref": "#/$defs/nonEmptyUniqueStrings" },
+    "dependencies": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$" }
+    },
+    "sourceUri": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "nonEmptyUniqueStrings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

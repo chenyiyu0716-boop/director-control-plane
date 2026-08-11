@@ -100,6 +100,50 @@ CREATE TABLE IF NOT EXISTS audit_event (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS control_task (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES project(id),
+  title TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  scope_json TEXT NOT NULL,
+  acceptance_json TEXT NOT NULL,
+  priority TEXT NOT NULL CHECK(priority IN ('P0', 'P1', 'P2', 'P3')),
+  state TEXT NOT NULL CHECK(state IN ('DRAFT', 'NEEDS_DECISION', 'READY', 'CLAIMED', 'RUNNING', 'REVIEW', 'DONE', 'BLOCKED', 'FAILED')),
+  version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
+  risk_level TEXT NOT NULL CHECK(risk_level IN ('low', 'medium', 'high', 'critical')),
+  allowed_executors_json TEXT NOT NULL,
+  workspace_roots_json TEXT NOT NULL,
+  source_uri TEXT,
+  source_fingerprint TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(project_id, source_fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS control_task_dependency (
+  task_id TEXT NOT NULL REFERENCES control_task(id) ON DELETE CASCADE,
+  depends_on_task_id TEXT NOT NULL REFERENCES control_task(id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(task_id, depends_on_task_id),
+  CHECK(task_id <> depends_on_task_id)
+);
+
+CREATE TABLE IF NOT EXISTS control_task_transition (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES control_task(id) ON DELETE CASCADE,
+  from_state TEXT,
+  to_state TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  previous_version INTEGER NOT NULL,
+  result_version INTEGER NOT NULL,
+  request_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_run_project_started ON agent_run(project_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_project_status ON review_item(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_finding_fingerprint ON finding(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_control_task_project_state_priority ON control_task(project_id, state, priority, updated_at);
+CREATE INDEX IF NOT EXISTS idx_control_task_dependency_target ON control_task_dependency(depends_on_task_id);
+CREATE INDEX IF NOT EXISTS idx_control_task_transition_task_created ON control_task_transition(task_id, created_at);

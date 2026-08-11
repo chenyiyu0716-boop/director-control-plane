@@ -4,6 +4,7 @@ from typing import Dict, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from ..storage import Repository
+from ..domain.models import TaskState
 
 
 ROUTES: Dict[str, str] = {
@@ -31,6 +32,29 @@ def create_handler(repository: Repository):
                 limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
                 self._json(200, {"items": repository.list_rows(table, limit), "limit": limit})
                 return
+            if parsed.path == "/api/tasks":
+                query = parse_qs(parsed.query)
+                limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+                project_id = query.get("project_id", [None])[0]
+                state = query.get("state", [None])[0]
+                if state and state not in {value.value for value in TaskState}:
+                    self._json(400, {"error": "invalid_task_state"})
+                    return
+                self._json(200, {"items": repository.list_tasks(project_id, state, limit), "limit": limit})
+                return
+            if parsed.path.startswith("/api/tasks/"):
+                parts = [part for part in parsed.path.split("/") if part]
+                if len(parts) == 3:
+                    task = repository.get_task(parts[2])
+                    self._json(200, task) if task else self._json(404, {"error": "task_not_found"})
+                    return
+                if len(parts) == 4 and parts[3] == "history":
+                    task = repository.get_task(parts[2])
+                    if not task:
+                        self._json(404, {"error": "task_not_found"})
+                        return
+                    self._json(200, {"items": repository.list_task_transitions(parts[2])})
+                    return
             self._json(404, {"error": "not_found"})
 
         def log_message(self, _format, *_args):

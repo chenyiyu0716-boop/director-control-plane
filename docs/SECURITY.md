@@ -7,6 +7,8 @@
 - Source document bodies are not stored in SQLite; only hashes, metadata and structural summaries are kept.
 - Git inspection uses read-only commands. Release Agent cannot commit, push, merge, tag or deploy.
 - The HTTP API is GET-only and listens on loopback by default.
+- Task registration and transitions are local CLI operations with optimistic version checks and append-only audit evidence.
+- Executor identities in `allowedExecutors` are policy metadata only; TASK-015 does not implement task claiming or command execution.
 - Secrets, tokens, cookies, environment dumps and database contents must not enter findings or audit events.
 
 ## Not yet approved for production exposure

@@ -12,7 +12,8 @@ AI Agent 运维总控系统 —— 独立于业务 Agent 的控制面，统一�
 - `ObserverAgent` 检查项目根目录、Ledger、状态文件和 Git 可读性，单项失败不会丢失整次运行。
 - `ReleaseAgent` 汇总分支、提交、工作区状态与 Release Notes 草案；不提交、不推送、不发布。
 - SQLite 保存 Project、AgentRun、Finding、CheckResult、KnowledgeCandidate、ReviewItem、ReleaseReport 和 AuditEvent。
-- 本地只读 API 提供 `/health`、`/api/projects`、`/api/runs`、`/api/findings`、`/api/reviews`、`/api/checks`、`/api/releases`。
+- Task Registry 保存任务定义、依赖、版本化状态和完整迁移历史，并可生成确定性的 Markdown 人类视图。
+- 本地只读 API 提供 `/health`、`/api/projects`、`/api/runs`、`/api/findings`、`/api/reviews`、`/api/checks`、`/api/releases`、`/api/tasks`。
 
 ### 本地启动
 
@@ -20,6 +21,8 @@ AI Agent 运维总控系统 —— 独立于业务 Agent 的控制面，统一�
 cp config/projects.example.json config/projects.local.json
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json init-db
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json run-all --trigger manual
+PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json task register --file config/task.example.json --actor codex
+PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json task render --output var/TASKS.md
 PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json serve
 ```
 

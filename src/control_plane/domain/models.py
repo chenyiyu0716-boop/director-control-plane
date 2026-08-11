@@ -17,6 +17,48 @@ class RunStatus(str, Enum):
     PARTIAL = "partial"
 
 
+class TaskState(str, Enum):
+    DRAFT = "DRAFT"
+    NEEDS_DECISION = "NEEDS_DECISION"
+    READY = "READY"
+    CLAIMED = "CLAIMED"
+    RUNNING = "RUNNING"
+    REVIEW = "REVIEW"
+    DONE = "DONE"
+    BLOCKED = "BLOCKED"
+    FAILED = "FAILED"
+
+
+class TaskPriority(str, Enum):
+    P0 = "P0"
+    P1 = "P1"
+    P2 = "P2"
+    P3 = "P3"
+
+
+class TaskRisk(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+@dataclass(frozen=True)
+class ControlTask:
+    id: str
+    project_id: str
+    title: str
+    objective: str
+    scope: List[str]
+    acceptance: List[str]
+    priority: TaskPriority
+    risk_level: TaskRisk
+    allowed_executors: List[str]
+    workspace_roots: List[str]
+    dependencies: List[str] = field(default_factory=list)
+    source_uri: Optional[str] = None
+
+
 @dataclass(frozen=True)
 class Finding:
     category: str

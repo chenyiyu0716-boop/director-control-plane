@@ -1,0 +1,26 @@
+{
+  "id": "TASK-015",
+  "projectId": "control-panel",
+  "title": "Build machine-readable task registry",
+  "objective": "Make task state reconstructible, versioned, and auditable.",
+  "scope": [
+    "Task schema and dependency model",
+    "Validated state transitions",
+    "Deterministic Markdown projection"
+  ],
+  "acceptance": [
+    "Illegal transitions and duplicate tasks are rejected",
+    "Current state can be rebuilt from transition history"
+  ],
+  "priority": "P0",
+  "riskLevel": "medium",
+  "allowedExecutors": [
+    "codex",
+    "workbuddy-hy3"
+  ],
+  "workspaceRoots": [
+    "/absolute/path/to/approved/worktree"
+  ],
+  "dependencies": [],
+  "sourceUri": "docs/control-plane/TASK_QUEUE.md#task-015"
+}

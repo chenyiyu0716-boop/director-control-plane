@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..config import ProjectConfig
-from ..domain.models import Check, Finding, KnowledgeCandidate, RunStatus
+from ..domain.models import Check, ControlTask, Finding, KnowledgeCandidate, RunStatus, TaskState
 
 
 def utc_now() -> str:
@@ -16,6 +16,26 @@ def utc_now() -> str:
 
 def json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+class TaskRepositoryError(Exception):
+    pass
+
+
+class DuplicateTaskError(TaskRepositoryError):
+    pass
+
+
+class TaskNotFoundError(TaskRepositoryError):
+    pass
+
+
+class TaskVersionConflictError(TaskRepositoryError):
+    pass
+
+
+class TaskDependencyBlockedError(TaskRepositoryError):
+    pass
 
 
 class Repository:
@@ -140,8 +160,156 @@ class Repository:
             )
         return report_id
 
+    def register_task(self, task: ControlTask, source_fingerprint: str, actor: str, request_id: str) -> Dict[str, Any]:
+        now = utc_now()
+        with self.connect() as connection:
+            project = connection.execute("SELECT id FROM project WHERE id = ?", (task.project_id,)).fetchone()
+            if not project:
+                raise TaskNotFoundError("project is not registered: {}".format(task.project_id))
+            dependencies = []
+            for dependency_id in task.dependencies:
+                dependency = connection.execute(
+                    "SELECT id, project_id FROM control_task WHERE id = ?", (dependency_id,)
+                ).fetchone()
+                if not dependency:
+                    raise TaskNotFoundError("dependency is not registered: {}".format(dependency_id))
+                if dependency["project_id"] != task.project_id:
+                    raise TaskDependencyBlockedError("dependency belongs to a different project: {}".format(dependency_id))
+                dependencies.append(dependency_id)
+            try:
+                connection.execute(
+                    """INSERT INTO control_task
+                       (id, project_id, title, objective, scope_json, acceptance_json, priority, state,
+                        version, risk_level, allowed_executors_json, workspace_roots_json, source_uri,
+                        source_fingerprint, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)""",
+                    (task.id, task.project_id, task.title, task.objective, json_text(task.scope),
+                     json_text(task.acceptance), task.priority.value, TaskState.DRAFT.value,
+                     task.risk_level.value, json_text(task.allowed_executors), json_text(task.workspace_roots),
+                     task.source_uri, source_fingerprint, now, now),
+                )
+                for dependency_id in dependencies:
+                    connection.execute(
+                        "INSERT INTO control_task_dependency (task_id, depends_on_task_id, created_at) VALUES (?, ?, ?)",
+                        (task.id, dependency_id, now),
+                    )
+                connection.execute(
+                    """INSERT INTO control_task_transition
+                       (id, task_id, from_state, to_state, actor, reason, previous_version, result_version, request_id, created_at)
+                       VALUES (?, ?, NULL, ?, ?, ?, 0, 1, ?, ?)""",
+                    (str(uuid.uuid4()), task.id, TaskState.DRAFT.value, actor, "task registered", request_id, now),
+                )
+            except sqlite3.IntegrityError as error:
+                raise DuplicateTaskError("task id or source fingerprint already exists") from error
+            self._audit(
+                connection, actor, "task.registered", "control_task", task.id, None,
+                {"state": TaskState.DRAFT.value, "version": 1}, request_id=request_id,
+            )
+        registered = self.get_task(task.id)
+        if registered is None:
+            raise TaskNotFoundError("task registration was not persisted: {}".format(task.id))
+        return registered
+
+    def transition_task(self, task_id: str, from_state: TaskState, to_state: TaskState, expected_version: int,
+                        actor: str, reason: str, request_id: str) -> Dict[str, Any]:
+        now = utc_now()
+        with self.connect() as connection:
+            current = connection.execute("SELECT * FROM control_task WHERE id = ?", (task_id,)).fetchone()
+            if not current:
+                raise TaskNotFoundError("task is not registered: {}".format(task_id))
+            if current["state"] != from_state.value or int(current["version"]) != expected_version:
+                raise TaskVersionConflictError(
+                    "expected {} v{}, found {} v{}".format(
+                        from_state.value, expected_version, current["state"], current["version"]
+                    )
+                )
+            if to_state is TaskState.READY:
+                blocked = connection.execute(
+                    """SELECT dependency.id, dependency.state
+                       FROM control_task_dependency link
+                       JOIN control_task dependency ON dependency.id = link.depends_on_task_id
+                       WHERE link.task_id = ? AND dependency.state <> 'DONE'
+                       ORDER BY dependency.id""",
+                    (task_id,),
+                ).fetchall()
+                if blocked:
+                    details = ", ".join("{}={}".format(item["id"], item["state"]) for item in blocked)
+                    raise TaskDependencyBlockedError("dependencies are not DONE: {}".format(details))
+            result_version = expected_version + 1
+            result = connection.execute(
+                """UPDATE control_task SET state = ?, version = ?, updated_at = ?
+                   WHERE id = ? AND state = ? AND version = ?""",
+                (to_state.value, result_version, now, task_id, from_state.value, expected_version),
+            )
+            if result.rowcount != 1:
+                raise TaskVersionConflictError("task changed during transition")
+            try:
+                connection.execute(
+                    """INSERT INTO control_task_transition
+                       (id, task_id, from_state, to_state, actor, reason, previous_version, result_version, request_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (str(uuid.uuid4()), task_id, from_state.value, to_state.value, actor, reason,
+                     expected_version, result_version, request_id, now),
+                )
+            except sqlite3.IntegrityError as error:
+                raise TaskVersionConflictError("transition request id already used") from error
+            self._audit(
+                connection, actor, "task.transitioned", "control_task", task_id,
+                {"state": from_state.value, "version": expected_version},
+                {"state": to_state.value, "version": result_version}, request_id=request_id,
+            )
+        transitioned = self.get_task(task_id)
+        if transitioned is None:
+            raise TaskNotFoundError("task transition was not persisted: {}".format(task_id))
+        return transitioned
+
+    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM control_task WHERE id = ?", (task_id,)).fetchone()
+            return self._task_record(connection, row) if row else None
+
+    def list_tasks(self, project_id: Optional[str] = None, state: Optional[str] = None,
+                   limit: int = 100) -> List[Dict[str, Any]]:
+        clauses = []
+        values: List[Any] = []
+        if project_id:
+            clauses.append("project_id = ?")
+            values.append(project_id)
+        if state:
+            clauses.append("state = ?")
+            values.append(state)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        values.append(limit)
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM control_task{} ORDER BY priority, id LIMIT ?".format(where), tuple(values)
+            ).fetchall()
+            return [self._task_record(connection, row) for row in rows]
+
+    def list_task_transitions(self, task_id: str) -> List[Dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM control_task_transition WHERE task_id = ? ORDER BY result_version, created_at",
+                (task_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _task_record(self, connection: sqlite3.Connection, row: sqlite3.Row) -> Dict[str, Any]:
+        record = dict(row)
+        for field_name in ("scope_json", "acceptance_json", "allowed_executors_json", "workspace_roots_json"):
+            record[field_name[:-5]] = json.loads(record.pop(field_name))
+        dependencies = connection.execute(
+            "SELECT depends_on_task_id FROM control_task_dependency WHERE task_id = ? ORDER BY depends_on_task_id",
+            (record["id"],),
+        ).fetchall()
+        record["dependencies"] = [item["depends_on_task_id"] for item in dependencies]
+        return record
+
     def list_rows(self, table: str, limit: int = 100) -> List[Dict[str, Any]]:
-        allowed = {"project", "agent_run", "finding", "review_item", "check_result", "release_report"}
+        allowed = {
+            "project", "agent_run", "finding", "review_item", "check_result", "release_report",
+            "control_task", "control_task_transition", "audit_event",
+        }
         if table not in allowed:
             raise ValueError("unsupported table")
         with self.connect() as connection:
@@ -149,12 +317,13 @@ class Repository:
         return [dict(row) for row in rows]
 
     def _audit(self, connection: sqlite3.Connection, actor: str, action: str, object_type: str,
-               object_id: str, before: Optional[Dict[str, Any]], after: Optional[Dict[str, Any]]) -> None:
+               object_id: str, before: Optional[Dict[str, Any]], after: Optional[Dict[str, Any]],
+               request_id: Optional[str] = None) -> None:
         connection.execute(
             """INSERT INTO audit_event
                (id, actor, action, object_type, object_id, before_json, after_json, request_id, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (str(uuid.uuid4()), actor, action, object_type, object_id,
              json_text(before) if before else None, json_text(after) if after else None,
-             str(uuid.uuid4()), utc_now()),
+             request_id or str(uuid.uuid4()), utc_now()),
         )

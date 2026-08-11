@@ -1,3 +1,15 @@
-from .repository import Repository
+from .repository import (
+    DuplicateTaskError,
+    Repository,
+    TaskDependencyBlockedError,
+    TaskNotFoundError,
+    TaskVersionConflictError,
+)
 
-__all__ = ["Repository"]
+__all__ = [
+    "DuplicateTaskError",
+    "Repository",
+    "TaskDependencyBlockedError",
+    "TaskNotFoundError",
+    "TaskVersionConflictError",
+]
