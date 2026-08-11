@@ -1,3 +1,3 @@
-from .models import AgentType, ControlTask, Finding, RunStatus, TaskPriority, TaskRisk, TaskState
+from .models import AgentType, ControlTask, DecisionFacts, DecisionOutcome, Finding, RunStatus, TaskPriority, TaskRisk, TaskState
 
-__all__ = ["AgentType", "ControlTask", "Finding", "RunStatus", "TaskPriority", "TaskRisk", "TaskState"]
+__all__ = ["AgentType", "ControlTask", "DecisionFacts", "DecisionOutcome", "Finding", "RunStatus", "TaskPriority", "TaskRisk", "TaskState"]

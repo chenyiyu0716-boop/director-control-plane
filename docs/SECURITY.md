@@ -8,6 +8,8 @@
 - Git inspection uses read-only commands. Release Agent cannot commit, push, merge, tag or deploy.
 - The HTTP API is GET-only and listens on loopback by default.
 - Task registration and transitions are local CLI operations with optimistic version checks and append-only audit evidence.
+- Task policy uses explicit boolean facts and versioned deterministic rules; incomplete safety facts block execution, and model advice cannot grant READY status.
+- Medium, high and critical risk plus architecture, production, permission, external, paid, destructive, release and scope-expansion actions require owner confirmation.
 - Executor identities in `allowedExecutors` are policy metadata only; TASK-015 does not implement task claiming or command execution.
 - Secrets, tokens, cookies, environment dumps and database contents must not enter findings or audit events.
 

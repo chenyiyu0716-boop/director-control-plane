@@ -6,8 +6,8 @@ from typing import Iterable
 
 from .api.server import serve
 from .config import ProjectConfig, load_settings
-from .domain.models import AgentType, TaskState
-from .services import Orchestrator, TaskRegistry, task_from_dict
+from .domain.models import AgentType, DecisionOutcome, TaskState
+from .services import DecisionPolicyEngine, Orchestrator, TaskRegistry, decision_facts_from_dict, task_from_dict
 from .storage import Repository
 
 
@@ -55,6 +55,16 @@ def build_parser() -> argparse.ArgumentParser:
     task_list.add_argument("--limit", type=int, default=100)
     task_history = task_commands.add_parser("history")
     task_history.add_argument("task_id")
+    task_decide = task_commands.add_parser("decide")
+    task_decide.add_argument("task_id")
+    task_decide.add_argument("--facts", required=True)
+    task_decide.add_argument("--expected-version", required=True, type=int)
+    task_decide.add_argument("--actor", required=True)
+    task_decide.add_argument("--request-id")
+    task_decisions = task_commands.add_parser("decisions")
+    task_decisions.add_argument("task_id")
+    task_decisions.add_argument("--outcome", choices=[value.value for value in DecisionOutcome])
+    task_decisions.add_argument("--limit", type=int, default=100)
     task_render = task_commands.add_parser("render")
     task_render.add_argument("--project")
     task_render.add_argument("--output", required=True)
@@ -95,6 +105,19 @@ def main(argv=None) -> int:
             return 0
         if args.task_command == "history":
             print(json.dumps(repository.list_task_transitions(args.task_id), ensure_ascii=False, indent=2))
+            return 0
+        if args.task_command == "decide":
+            payload = json.loads(Path(args.facts).read_text(encoding="utf-8"))
+            result = DecisionPolicyEngine(repository).decide(
+                args.task_id, decision_facts_from_dict(payload), args.expected_version, args.actor, args.request_id
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.task_command == "decisions":
+            print(json.dumps(
+                repository.list_task_decisions(args.task_id, args.outcome, args.limit),
+                ensure_ascii=False, indent=2,
+            ))
             return 0
         registry.render_to_file(Path(args.output), args.project)
         print(args.output)

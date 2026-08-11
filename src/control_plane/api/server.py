@@ -4,7 +4,7 @@ from typing import Dict, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from ..storage import Repository
-from ..domain.models import TaskState
+from ..domain.models import DecisionOutcome, TaskState
 
 
 ROUTES: Dict[str, str] = {
@@ -42,6 +42,18 @@ def create_handler(repository: Repository):
                     return
                 self._json(200, {"items": repository.list_tasks(project_id, state, limit), "limit": limit})
                 return
+            if parsed.path == "/api/decisions":
+                query = parse_qs(parsed.query)
+                limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+                task_id = query.get("task_id", [None])[0]
+                outcome = query.get("outcome", [None])[0]
+                if outcome and outcome not in {value.value for value in DecisionOutcome}:
+                    self._json(400, {"error": "invalid_decision_outcome"})
+                    return
+                self._json(200, {
+                    "items": repository.list_task_decisions(task_id, outcome, limit), "limit": limit,
+                })
+                return
             if parsed.path.startswith("/api/tasks/"):
                 parts = [part for part in parsed.path.split("/") if part]
                 if len(parts) == 3:
@@ -54,6 +66,13 @@ def create_handler(repository: Repository):
                         self._json(404, {"error": "task_not_found"})
                         return
                     self._json(200, {"items": repository.list_task_transitions(parts[2])})
+                    return
+                if len(parts) == 4 and parts[3] == "decisions":
+                    task = repository.get_task(parts[2])
+                    if not task:
+                        self._json(404, {"error": "task_not_found"})
+                        return
+                    self._json(200, {"items": repository.list_task_decisions(task_id=parts[2])})
                     return
             self._json(404, {"error": "not_found"})
 

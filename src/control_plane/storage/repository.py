@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..config import ProjectConfig
-from ..domain.models import Check, ControlTask, Finding, KnowledgeCandidate, RunStatus, TaskState
+from ..domain.models import Check, ControlTask, DecisionOutcome, Finding, KnowledgeCandidate, RunStatus, TaskState
 
 
 def utc_now() -> str:
@@ -263,6 +263,123 @@ class Repository:
             raise TaskNotFoundError("task transition was not persisted: {}".format(task_id))
         return transitioned
 
+    def dependency_snapshot(self, task_id: str) -> List[Dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT dependency.id, dependency.state, dependency.version
+                   FROM control_task_dependency link
+                   JOIN control_task dependency ON dependency.id = link.depends_on_task_id
+                   WHERE link.task_id = ? ORDER BY dependency.id""",
+                (task_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def apply_task_decision(
+        self, task_id: str, from_state: TaskState, outcome: DecisionOutcome, expected_version: int,
+        policy_version: str, reasons: List[str], matched_rules: List[str], facts: Dict[str, Any],
+        dependency_snapshot: List[Dict[str, Any]], advisory: Optional[Dict[str, Any]],
+        input_fingerprint: str, actor: str, request_id: str,
+    ) -> Dict[str, Any]:
+        now = utc_now()
+        to_state = TaskState(outcome.value)
+        result_version = expected_version + 1
+        decision_id = str(uuid.uuid4())
+        with self.connect() as connection:
+            current = connection.execute("SELECT state, version FROM control_task WHERE id = ?", (task_id,)).fetchone()
+            if not current:
+                raise TaskNotFoundError("task is not registered: {}".format(task_id))
+            if current["state"] != from_state.value or int(current["version"]) != expected_version:
+                raise TaskVersionConflictError(
+                    "expected {} v{}, found {} v{}".format(
+                        from_state.value, expected_version, current["state"], current["version"]
+                    )
+                )
+            if outcome is DecisionOutcome.READY:
+                blocked = connection.execute(
+                    """SELECT dependency.id, dependency.state
+                       FROM control_task_dependency link
+                       JOIN control_task dependency ON dependency.id = link.depends_on_task_id
+                       WHERE link.task_id = ? AND dependency.state <> 'DONE'
+                       ORDER BY dependency.id""",
+                    (task_id,),
+                ).fetchall()
+                if blocked:
+                    details = ", ".join("{}={}".format(item["id"], item["state"]) for item in blocked)
+                    raise TaskDependencyBlockedError("dependencies are not DONE: {}".format(details))
+            result = connection.execute(
+                """UPDATE control_task SET state = ?, version = ?, updated_at = ?
+                   WHERE id = ? AND state = ? AND version = ?""",
+                (to_state.value, result_version, now, task_id, from_state.value, expected_version),
+            )
+            if result.rowcount != 1:
+                raise TaskVersionConflictError("task changed during policy decision")
+            try:
+                connection.execute(
+                    """INSERT INTO task_decision
+                       (id, task_id, task_version, result_version, policy_version, outcome, reasons_json,
+                        matched_rules_json, facts_json, dependency_snapshot_json, advisory_json,
+                        input_fingerprint, actor, request_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (decision_id, task_id, expected_version, result_version, policy_version, outcome.value,
+                     json_text(reasons), json_text(matched_rules), json_text(facts),
+                     json_text(dependency_snapshot), json_text(advisory) if advisory else None,
+                     input_fingerprint, actor, request_id, now),
+                )
+                connection.execute(
+                    """INSERT INTO control_task_transition
+                       (id, task_id, from_state, to_state, actor, reason, previous_version, result_version, request_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (str(uuid.uuid4()), task_id, from_state.value, to_state.value, actor,
+                     "policy decision {}: {}".format(policy_version, "; ".join(reasons)),
+                     expected_version, result_version, request_id, now),
+                )
+            except sqlite3.IntegrityError as error:
+                raise TaskVersionConflictError("decision request id already used") from error
+            self._audit(
+                connection, actor, "task.decision_applied", "control_task", task_id,
+                {"state": from_state.value, "version": expected_version},
+                {"state": to_state.value, "version": result_version, "decision_id": decision_id,
+                 "policy_version": policy_version, "input_fingerprint": input_fingerprint},
+                request_id=request_id,
+            )
+        decision = self.get_task_decision(decision_id)
+        task = self.get_task(task_id)
+        if decision is None or task is None:
+            raise TaskNotFoundError("policy decision was not persisted: {}".format(task_id))
+        return {"decision": decision, "task": task}
+
+    def get_task_decision(self, decision_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM task_decision WHERE id = ?", (decision_id,)).fetchone()
+        return self._decision_record(row) if row else None
+
+    def list_task_decisions(self, task_id: Optional[str] = None, outcome: Optional[str] = None,
+                            limit: int = 100) -> List[Dict[str, Any]]:
+        clauses = []
+        values: List[Any] = []
+        if task_id:
+            clauses.append("task_id = ?")
+            values.append(task_id)
+        if outcome:
+            clauses.append("outcome = ?")
+            values.append(outcome)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        values.append(limit)
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM task_decision{} ORDER BY created_at DESC, rowid DESC LIMIT ?".format(where),
+                tuple(values),
+            ).fetchall()
+        return [self._decision_record(row) for row in rows]
+
+    def _decision_record(self, row: sqlite3.Row) -> Dict[str, Any]:
+        record = dict(row)
+        for field_name in ("reasons_json", "matched_rules_json", "facts_json", "dependency_snapshot_json"):
+            record[field_name[:-5]] = json.loads(record.pop(field_name))
+        advisory = record.pop("advisory_json")
+        record["advisory"] = json.loads(advisory) if advisory else None
+        return record
+
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         with self.connect() as connection:
             row = connection.execute("SELECT * FROM control_task WHERE id = ?", (task_id,)).fetchone()
@@ -308,7 +425,7 @@ class Repository:
     def list_rows(self, table: str, limit: int = 100) -> List[Dict[str, Any]]:
         allowed = {
             "project", "agent_run", "finding", "review_item", "check_result", "release_report",
-            "control_task", "control_task_transition", "audit_event",
+            "control_task", "control_task_transition", "task_decision", "audit_event",
         }
         if table not in allowed:
             raise ValueError("unsupported table")

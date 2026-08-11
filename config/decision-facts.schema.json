@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://director-control-plane.local/schemas/decision-facts.json",
+  "title": "Director Control Plane Decision Facts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "architectureChange",
+    "productionChange",
+    "permissionChange",
+    "externalCommunication",
+    "paidAction",
+    "destructiveAction",
+    "releaseAction",
+    "scopeExpansion",
+    "safetyEvidenceComplete",
+    "baselineKnown",
+    "workspaceAuthorized",
+    "acceptanceComplete"
+  ],
+  "properties": {
+    "architectureChange": { "type": "boolean" },
+    "productionChange": { "type": "boolean" },
+    "permissionChange": { "type": "boolean" },
+    "externalCommunication": { "type": "boolean" },
+    "paidAction": { "type": "boolean" },
+    "destructiveAction": { "type": "boolean" },
+    "releaseAction": { "type": "boolean" },
+    "scopeExpansion": { "type": "boolean" },
+    "safetyEvidenceComplete": { "type": "boolean" },
+    "baselineKnown": { "type": "boolean" },
+    "workspaceAuthorized": { "type": "boolean" },
+    "acceptanceComplete": { "type": "boolean" },
+    "modelAdvisory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recommendation": { "type": "string", "minLength": 1 },
+        "explanation": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "architectureChange": false,
+  "productionChange": false,
+  "permissionChange": false,
+  "externalCommunication": false,
+  "paidAction": false,
+  "destructiveAction": false,
+  "releaseAction": false,
+  "scopeExpansion": false,
+  "safetyEvidenceComplete": true,
+  "baselineKnown": true,
+  "workspaceAuthorized": true,
+  "acceptanceComplete": true,
+  "modelAdvisory": {
+    "recommendation": "READY",
+    "explanation": "Advisory only; deterministic rules remain authoritative."
+  }
+}

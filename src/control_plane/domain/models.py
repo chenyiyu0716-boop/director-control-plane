@@ -43,6 +43,29 @@ class TaskRisk(str, Enum):
     CRITICAL = "critical"
 
 
+class DecisionOutcome(str, Enum):
+    READY = "READY"
+    NEEDS_DECISION = "NEEDS_DECISION"
+    BLOCKED = "BLOCKED"
+
+
+@dataclass(frozen=True)
+class DecisionFacts:
+    architecture_change: bool
+    production_change: bool
+    permission_change: bool
+    external_communication: bool
+    paid_action: bool
+    destructive_action: bool
+    release_action: bool
+    scope_expansion: bool
+    safety_evidence_complete: bool
+    baseline_known: bool
+    workspace_authorized: bool
+    acceptance_complete: bool
+    model_advisory: Optional[Dict[str, Any]] = None
+
+
 @dataclass(frozen=True)
 class ControlTask:
     id: str

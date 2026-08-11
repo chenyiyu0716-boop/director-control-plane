@@ -141,9 +141,29 @@ CREATE TABLE IF NOT EXISTS control_task_transition (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS task_decision (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES control_task(id) ON DELETE CASCADE,
+  task_version INTEGER NOT NULL,
+  result_version INTEGER NOT NULL,
+  policy_version TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK(outcome IN ('READY', 'NEEDS_DECISION', 'BLOCKED')),
+  reasons_json TEXT NOT NULL,
+  matched_rules_json TEXT NOT NULL,
+  facts_json TEXT NOT NULL,
+  dependency_snapshot_json TEXT NOT NULL,
+  advisory_json TEXT,
+  input_fingerprint TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  request_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_run_project_started ON agent_run(project_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_project_status ON review_item(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_finding_fingerprint ON finding(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_control_task_project_state_priority ON control_task(project_id, state, priority, updated_at);
 CREATE INDEX IF NOT EXISTS idx_control_task_dependency_target ON control_task_dependency(depends_on_task_id);
 CREATE INDEX IF NOT EXISTS idx_control_task_transition_task_created ON control_task_transition(task_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_task_decision_task_created ON task_decision(task_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_decision_outcome_created ON task_decision(outcome, created_at DESC);

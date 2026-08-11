@@ -16,6 +16,8 @@ python3 -m control_plane.main --config config/projects.local.json task register 
 python3 -m control_plane.main --config config/projects.local.json task transition TASK-015 --to READY --expected-version 1 --actor codex --reason "planning approved"
 python3 -m control_plane.main --config config/projects.local.json task list --project control-panel
 python3 -m control_plane.main --config config/projects.local.json task history TASK-015
+python3 -m control_plane.main --config config/projects.local.json task decide TASK-015 --facts config/decision-facts.example.json --expected-version 1 --actor codex
+python3 -m control_plane.main --config config/projects.local.json task decisions TASK-015
 python3 -m control_plane.main --config config/projects.local.json task render --project control-panel --output var/TASKS.md
 python3 -m control_plane.main --config config/projects.local.json serve
 ```
@@ -24,6 +26,10 @@ Task mutations are CLI-only in TASK-015. Every transition requires the expected 
 dependency gates and the allowed state graph are enforced before a new version is committed. The HTTP API
 only exposes task records and transition history for inspection. `config/task.schema.json` is the portable
 contract; `config/task.example.json` is a ready-to-copy example.
+
+Decision facts use `config/decision-facts.schema.json`. A decision is applied only to a `DRAFT` or `BLOCKED`
+task and requires its expected version. `modelAdvisory` is optional, stored separately, and cannot alter the
+outcome. Read-only evidence is available at `/api/decisions` and `/api/tasks/{id}/decisions`.
 
 The API binds to `127.0.0.1:8765` by default. Do not bind it to a public interface until authentication,
 request auditing and deployment security have been implemented and reviewed.
