@@ -1,8 +1,22 @@
-# Director Control Plane
+# Chief
 
-AI Agent 运维总控系统 —— 独立于业务 Agent 的控制面，统一管理多个 Agent 项目的知识资产、运行状态与版本信息。
+Chief 是 AI Agent 运维总控系统 —— 独立于业务 Agent 的控制层，统一管理多个 Agent 项目的知识资产、运行状态与版本信息。
 
-> 当前阶段：v0.1（可观测，先不自动修复）。设计详见 [`docs/DIRECTOR_CONTROL_PLANE_V0.1.md`](docs/DIRECTOR_CONTROL_PLANE_V0.1.md)。
+> 当前阶段：v0.1（可观测，先不自动修复）。设计详见 [`docs/DIRECTOR_CONTROL_PLANE_V0.1.md`](docs/DIRECTOR_CONTROL_PLANE_V0.1.md)（历史规格文档，文件名与标题沿用旧称，不做改写）。
+
+## 命名与兼容性
+
+对外产品名统一为 **Chief**。以下标识符仅作内部兼容用途，保持不变，不随产品名改写：
+
+| 类别 | 标识符 | 说明 |
+| --- | --- | --- |
+| Python 包 | `control_plane` | 导入路径与模块名不变 |
+| 项目 ID | `control-panel` | 配置、任务与基线登记沿用 |
+| 数据库路径 | `var/control-plane.sqlite3` | 运行时数据文件不迁移 |
+| 环境变量 | `CONTROL_PLANE_CONFIG`、`CONTROL_PLANE_FEISHU_CONFIG` | 启动契约不变 |
+| 历史规格文档 | `docs/DIRECTOR_CONTROL_PLANE_V0.1.md`、`docs/DEPENDENCY_SELF_HEALING_SYSTEM.md` | 冻结文档不改写 |
+
+架构语境中的「控制面 / control plane」仍指分层概念，不作为产品名使用。
 
 ## 当前可运行闭环
 
@@ -57,7 +71,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 ## 定位
 
-- 控制面与业务面分离，不侵入业务 Agent 核心逻辑。
+- 控制层与业务层分离：Chief 独立部署、独立存储，不侵入业务 Agent 核心逻辑。
 - 先可观测，后自动化：v0.1 负责发现 / 整理 / 报告 / 建议；v0.2 再评估有限自动修复。
 - 人保留最终决策权；所有动作可追踪、可回滚、有日志。
 

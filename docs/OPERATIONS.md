@@ -2,8 +2,12 @@
 
 ## Runtime model
 
-Director Control Plane v0.1 runs as a local read-only collector plus a local HTTP API.
+Chief v0.1 runs as a local read-only collector plus a local HTTP API.
 The collector reads only configured project paths and writes only to its own SQLite database.
+
+Chief is the user-facing product name. The `control_plane` package, `control-panel` project IDs,
+`var/control-plane.sqlite3` and the `CONTROL_PLANE_*` environment variables remain compatibility-only
+internal identifiers and are not renamed.
 
 ## Commands
 
@@ -75,5 +79,5 @@ that worktree HEAD with the configured project main HEAD. Missing Docker metadat
 worktrees, or a diverged history fails closed and creates a deployment-drift finding. A non-healthy result blocks
 release and automatic baseline synchronization; the observer never switches worktrees, restarts containers, or
 changes services.
-Restoring the database does not modify any connected project. Deleting the database removes Control
-Plane history only and must still be treated as an audited operator action.
+Restoring the database does not modify any connected project. Deleting the database removes Chief
+history only and must still be treated as an audited operator action.

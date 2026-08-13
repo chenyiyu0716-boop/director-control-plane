@@ -147,9 +147,9 @@ class TaskRegistry:
     def render_markdown(self, project_id: Optional[str] = None) -> str:
         tasks = self.repository.list_tasks(project_id=project_id, limit=10000)
         lines = [
-            "# Control Plane Task Registry",
+            "# Chief Task Registry",
             "",
-            "> Generated from Control Plane state. Do not edit this projection by hand.",
+            "> Generated from Chief state. Do not edit this projection by hand.",
             "",
         ]
         for state in TaskState:

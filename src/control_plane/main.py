@@ -23,7 +23,13 @@ def selected_projects(projects: Iterable[ProjectConfig], project_id: str):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Director Control Plane v0.1")
+    parser = argparse.ArgumentParser(
+        description="Chief v0.1 — AI Agent operations control system",
+        epilog=(
+            "Compatibility note: the control_plane package, control-panel project IDs and the "
+            "control-plane.sqlite3 database path are internal identifiers and stay unchanged."
+        ),
+    )
     parser.add_argument("--config", help="Path to non-secret project configuration")
     subcommands = parser.add_subparsers(dest="command", required=True)
     subcommands.add_parser("init-db")

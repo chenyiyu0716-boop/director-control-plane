@@ -7,7 +7,7 @@ from pathlib import Path
 
 from control_plane.config import ProjectConfig
 from control_plane.domain.models import AgentType, TaskState
-from control_plane.main import main
+from control_plane.main import build_parser, main
 from control_plane.services import IllegalTaskTransitionError, TaskRegistry, task_from_dict
 from control_plane.storage import (
     DuplicateTaskError,
@@ -101,6 +101,9 @@ class TaskRegistryTest(unittest.TestCase):
         self.assertIn("## DONE", first)
         self.assertIn("TASK-015", first)
         self.assertIn("`workbuddy-hy3`", first)
+        self.assertTrue(first.startswith("# Chief Task Registry"))
+        self.assertIn("> Generated from Chief state.", first)
+        self.assertNotIn("Control Plane Task Registry", first)
         output = self.root / "generated" / "TASKS.md"
         self.registry.render_to_file(output, "panel")
         self.assertEqual(output.read_text(encoding="utf-8"), first)
@@ -130,7 +133,30 @@ class TaskRegistryTest(unittest.TestCase):
             self.assertEqual(main(["--config", str(config_path), "task", "history", "TASK-015"]), 0)
             self.assertEqual(main(["--config", str(config_path), "task", "render", "--output", str(output_path)]), 0)
         self.assertIn('"state": "READY"', stdout.getvalue())
-        self.assertIn("TASK-015", output_path.read_text(encoding="utf-8"))
+        rendered = output_path.read_text(encoding="utf-8")
+        self.assertIn("TASK-015", rendered)
+        self.assertTrue(rendered.startswith("# Chief Task Registry"))
+
+
+class ProductNamingTest(unittest.TestCase):
+    def test_cli_help_presents_chief_and_keeps_internal_identifiers(self):
+        parser = build_parser()
+        self.assertIn("Chief", parser.description)
+        self.assertNotIn("Control Plane", parser.description)
+        help_text = parser.format_help()
+        self.assertIn("Chief", help_text)
+        for identifier in ("control_plane", "control-panel", "control-plane.sqlite3"):
+            self.assertIn(identifier, help_text)
+
+    def test_active_docs_present_chief_as_product_name(self):
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        self.assertTrue(readme.startswith("# Chief"))
+        self.assertIn("`control_plane`", readme)
+        self.assertIn("`control-panel`", readme)
+        operations = (root / "docs" / "OPERATIONS.md").read_text(encoding="utf-8")
+        self.assertIn("Chief v0.1 runs as a local read-only collector", operations)
+        self.assertNotIn("Director Control Plane", operations)
 
 
 if __name__ == "__main__":
