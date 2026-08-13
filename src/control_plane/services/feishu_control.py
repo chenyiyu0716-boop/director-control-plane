@@ -17,11 +17,12 @@ class FeishuControlError(Exception):
 class FeishuControlInbox:
     """Fast, transport-neutral inbox for sanitized Feishu card actions."""
 
-    def __init__(self, repository: Repository, owner_open_ids: Iterable[str]):
+    def __init__(self, repository: Repository, owner_open_ids: Iterable[str], escalation_handler: Any = None):
         self.repository = repository
         self.owner_open_ids = frozenset(value for value in owner_open_ids if value)
         if not self.owner_open_ids:
             raise FeishuControlError("at least one owner open_id is required")
+        self.escalation_handler = escalation_handler
 
     def ingest(self, event: Dict[str, Any]) -> Dict[str, Any]:
         required = {"event_id", "event_type", "operator_id", "nonce", "expires_at", "payload"}
@@ -65,6 +66,14 @@ class FeishuControlInbox:
             return self.repository.apply_owner_decision(
                 event["event_id"], self._text(payload, "task_id"), self._integer(payload, "task_version"),
                 self._text(payload, "action"), event["operator_id"], self._text(payload, "reason"),
+            )
+        if command == "escalation_decision":
+            if self.escalation_handler is None:
+                raise FeishuControlError("escalation decision handler is not configured")
+            return self.escalation_handler.apply_decision(
+                self._text(payload, "escalation_id"), self._text(payload, "action"),
+                event["operator_id"], str(payload.get("reason") or ""),
+                str(payload.get("parameters") or ""),
             )
         if command == "requirement_intake":
             existing = self.repository.get_requirement_intake_by_event(event["event_id"])
@@ -146,6 +155,7 @@ class FeishuControlInbox:
         allowed = {
             "command", "task_id", "task_version", "action", "reason", "project_id", "kind",
             "objective", "requested_priority", "intake_id", "intake_version", "confirm",
+            "escalation_id", "parameters",
         }
         unknown = sorted(set(payload) - allowed)
         if unknown:

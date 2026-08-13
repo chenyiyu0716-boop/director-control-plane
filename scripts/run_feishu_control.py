@@ -16,6 +16,8 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import (
 from control_plane.adapters.feishu import event_to_dict, normalize_card_action
 from control_plane.config import load_settings
 from control_plane.services import FeishuControlInbox
+from control_plane.services import EscalationDeliveryService
+from control_plane.adapters.feishu_transport import FeishuMessageTransport
 from control_plane.storage import Repository
 
 
@@ -37,13 +39,24 @@ def main() -> None:
     repository.migrate()
     for project in settings.projects:
         repository.upsert_project(project)
-    inbox = FeishuControlInbox(repository, control_config.get("ownerOpenIds", []))
+    owner_open_ids = control_config.get("ownerOpenIds", [])
+    if len(owner_open_ids) != 1:
+        raise SystemExit("Exactly one Owner open_id is required for escalation delivery")
+    escalation_directory = Path(control_config.get("escalationDirectory", ".workbuddy")).expanduser().resolve()
+    escalation_delivery = EscalationDeliveryService(
+        escalation_directory, FeishuMessageTransport(app_id, app_secret), owner_open_ids[0],
+    )
+    inbox = FeishuControlInbox(repository, owner_open_ids, escalation_delivery)
 
     stop = threading.Event()
 
     def worker() -> None:
+        next_escalation_poll = 0.0
         while not stop.wait(0.25):
             inbox.process_pending(limit=20)
+            if time.monotonic() >= next_escalation_poll:
+                escalation_delivery.poll()
+                next_escalation_poll = time.monotonic() + 60
 
     threading.Thread(target=worker, name="feishu-control-worker", daemon=True).start()
 

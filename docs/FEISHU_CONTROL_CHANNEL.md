@@ -1,5 +1,25 @@
 # Feishu Owner Control Channel
 
+## 升级事件送达
+
+`run_feishu_control.py` 同时轮询 `escalationDirectory`（默认 `.workbuddy`）中的
+`escalation-*.json`。首次送达和后续提醒使用稳定事件身份，提醒间隔一小时，单个事件最多
+15 次。每次投递带稳定幂等键，进程在响应落盘前异常重试也不会重复生成卡片。未回复或
+选择“稍后处理”时，任务继续保持 `BLOCKED`，不会调用 `fail`。
+
+卡片只允许 Owner 白名单账号操作。批准或拒绝经现有 nonce、过期时间和事件去重入口处理，
+并原子回写事件为 `APPROVED` 或 `DENIED`；送达层不会直接把任务改为 READY/DONE，也不会
+写 `APPLIED`。参数调整只作为结构化裁决约束保存，交给 Planner 重新走正常任务策略。
+
+启用真实送达前，在本地私有配置增加：
+
+```json
+{"ownerOpenIds":["ou_owner"],"escalationDirectory":"/absolute/path/to/.workbuddy"}
+```
+
+凭据仍只允许通过 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET` 环境变量提供。自动化测试使用假传输，
+不会读取凭据或发送真实消息。
+
 TASK-017 为指定 Owner 提供独立于 WorkBuddy 的飞书控制入口。它使用飞书企业自建应用的 SDK 长连接，不暴露公网回调地址。
 
 ## 处理边界

@@ -227,6 +227,38 @@ class FeishuControlTest(unittest.TestCase):
         self.assertEqual([value["confirm"] for value in confirm_values], [True, False])
         self.assertTrue(all(value["intake_version"] == 1 for value in confirm_values))
 
+    def test_escalation_callback_requires_configured_handler(self):
+        event = self.event("evt-escalation", "escalation_decision", {
+            "escalation_id": "a" * 64, "action": "approve", "reason": "approved",
+            "parameters": "fake tests only",
+        })
+        self.inbox.ingest(event)
+        result = self.inbox.process_pending()[0]
+        self.assertEqual(result["status"], "rejected")
+        self.assertIn("not configured", result["result"]["error"])
+
+    def test_escalation_callback_applies_only_through_owner_inbox(self):
+        class Handler:
+            def __init__(self):
+                self.calls = []
+
+            def apply_decision(self, *values):
+                self.calls.append(values)
+                return {"status": "APPROVED"}
+
+        handler = Handler()
+        inbox = FeishuControlInbox(self.repository, ["ou_owner"], handler)
+        event = self.event("evt-escalation-approved", "escalation_decision", {
+            "escalation_id": "b" * 64, "action": "approve", "reason": "approved",
+            "parameters": "fake tests only",
+        })
+        inbox.ingest(event)
+        result = inbox.process_pending()[0]
+        self.assertEqual(result["status"], "processed")
+        self.assertEqual(handler.calls[0], (
+            "b" * 64, "approve", "ou_owner", "approved", "fake tests only",
+        ))
+
 
 if __name__ == "__main__":
     unittest.main()
