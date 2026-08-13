@@ -58,7 +58,8 @@ class JuliusOnboardingTest(unittest.TestCase):
         ))
         self.registry = TaskRegistry(self.repository)
         self.policy = DecisionPolicyEngine(self.repository)
-        self.dispatcher = LeaseDispatcher(self.repository, default_ttl_seconds=30)
+        # 测试的是 Julius 独立 runtime 场景，故本 dispatcher 显式置空隔离集（julius 不隔离）。
+        self.dispatcher = LeaseDispatcher(self.repository, default_ttl_seconds=30, isolated_project_ids=frozenset())
         self.dispatcher.register_executor(JULIUS_EXECUTOR_ID, [JULIUS_PROJECT_ID], "low")
         self.dispatcher.register_executor(JULIUS_CORRECTION_EXECUTOR_ID, [JULIUS_PROJECT_ID], "low")
         self.baseline = shadow_baseline("213574b", [self.ledger, self.status])
