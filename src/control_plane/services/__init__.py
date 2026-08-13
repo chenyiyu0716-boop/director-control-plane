@@ -11,6 +11,10 @@ from .dispatcher import (
     BaselineConflictError, DispatcherError, ExecutorUnauthorizedError, LeaseConflictError,
     LeaseDispatcher,
 )
+from .executor_report import (
+    REPORT_VERSION, ExecutorReportService, completion_evidence_from_report,
+    executor_report_from_dict, report_fingerprint,
+)
 
 __all__ = [
     "DecisionPolicyEngine", "IllegalTaskTransitionError", "Orchestrator", "POLICY_VERSION",
@@ -20,5 +24,7 @@ __all__ = [
     "ReviewGate", "completion_evidence_from_dict",
     "BaselineConflictError", "DispatcherError", "ExecutorUnauthorizedError", "LeaseConflictError",
     "LeaseDispatcher",
+    "REPORT_VERSION", "ExecutorReportService", "completion_evidence_from_report",
+    "executor_report_from_dict", "report_fingerprint",
     "decision_facts_from_dict", "task_from_dict",
 ]

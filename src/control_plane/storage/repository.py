@@ -508,6 +508,62 @@ class Repository:
             row = connection.execute("SELECT * FROM task_review WHERE id = ?", (review_id,)).fetchone()
         return self._review_record(row) if row else None
 
+    def create_executor_report(self, report: Dict[str, Any], fingerprint: str,
+                               request_id: str) -> Dict[str, Any]:
+        report_id = str(uuid.uuid4())
+        with self.connect() as connection:
+            try:
+                connection.execute(
+                    """INSERT INTO executor_report
+                       (id, task_id, task_version, report_version, executor_id, lease_id,
+                        baseline_ref, report_json, report_fingerprint, request_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (report_id, report["taskId"], report["taskVersion"], report["reportVersion"],
+                     report["executorId"], report["leaseId"], report["baselineRef"],
+                     json_text(report), fingerprint, request_id, utc_now()),
+                )
+                self._audit(
+                    connection, report["executorId"], "executor.report_submitted", "control_task",
+                    report["taskId"], None, {"report_id": report_id, "fingerprint": fingerprint},
+                    request_id=request_id,
+                )
+            except sqlite3.IntegrityError as error:
+                raise TaskVersionConflictError("executor report request id already used") from error
+        stored = self.get_executor_report(report_id)
+        if stored is None:
+            raise TaskNotFoundError("executor report was not persisted")
+        return stored
+
+    def get_executor_report(self, report_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM executor_report WHERE id = ?", (report_id,)).fetchone()
+        return self._executor_report_record(row) if row else None
+
+    def get_executor_report_by_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM executor_report WHERE request_id = ?", (request_id,)
+            ).fetchone()
+        return self._executor_report_record(row) if row else None
+
+    def list_executor_reports(self, task_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM executor_report"
+        values: List[Any] = []
+        if task_id:
+            query += " WHERE task_id = ?"
+            values.append(task_id)
+        query += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
+        values.append(limit)
+        with self.connect() as connection:
+            rows = connection.execute(query, tuple(values)).fetchall()
+        return [self._executor_report_record(row) for row in rows]
+
+    @staticmethod
+    def _executor_report_record(row: sqlite3.Row) -> Dict[str, Any]:
+        record = dict(row)
+        record["report"] = json.loads(record.pop("report_json"))
+        return record
+
     def get_task_review_by_request(self, request_id: str) -> Optional[Dict[str, Any]]:
         with self.connect() as connection:
             row = connection.execute("SELECT * FROM task_review WHERE request_id = ?", (request_id,)).fetchone()
@@ -772,7 +828,7 @@ class Repository:
             "project", "agent_run", "finding", "review_item", "check_result", "release_report",
             "control_task", "control_task_transition", "task_decision", "task_review", "feishu_inbox_event",
             "owner_decision", "requirement_intake", "executor_profile", "project_baseline",
-            "task_lease", "dispatcher_operation", "audit_event",
+            "task_lease", "dispatcher_operation", "executor_report", "audit_event",
         }
         if table not in allowed:
             raise ValueError("unsupported table")

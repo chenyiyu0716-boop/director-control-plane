@@ -83,6 +83,14 @@ def create_handler(repository: Repository):
                     "items": repository.list_requirement_intakes(project_id, limit), "limit": limit,
                 })
                 return
+            if parsed.path == "/api/executor-reports":
+                query = parse_qs(parsed.query)
+                limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+                task_id = query.get("task_id", [None])[0]
+                self._json(200, {
+                    "items": repository.list_executor_reports(task_id, limit), "limit": limit,
+                })
+                return
             if parsed.path.startswith("/api/tasks/"):
                 parts = [part for part in parsed.path.split("/") if part]
                 if len(parts) == 3:
@@ -112,6 +120,17 @@ def create_handler(repository: Repository):
                     limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
                     self._json(200, {
                         "items": repository.list_task_reviews(parts[2], None, limit), "limit": limit,
+                    })
+                    return
+                if len(parts) == 4 and parts[3] == "reports":
+                    task = repository.get_task(parts[2])
+                    if not task:
+                        self._json(404, {"error": "task_not_found"})
+                        return
+                    query = parse_qs(parsed.query)
+                    limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+                    self._json(200, {
+                        "items": repository.list_executor_reports(parts[2], limit), "limit": limit,
                     })
                     return
             self._json(404, {"error": "not_found"})

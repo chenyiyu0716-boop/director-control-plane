@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### TASK-028 — Executor Report
+
+- Added immutable executor reports bound to the exact REVIEW task, completed lease, executor identity and lease baseline.
+- Added structured acceptance, test, file, risk and provenance evidence with idempotent submission and read-only CLI/API queries.
+- Report submission never changes task state or bypasses the independent Review Gate.
+
 ### TASK-020 — Read-only Shadow closeout
 
 - Added explicit `no_change` review evidence so read-only executor tasks can be accepted without fabricating commits.

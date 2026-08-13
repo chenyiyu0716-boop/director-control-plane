@@ -8,8 +8,8 @@ from .api.server import serve
 from .config import ProjectConfig, load_settings
 from .domain.models import AgentType, DecisionOutcome, TaskState
 from .services import (
-    DecisionPolicyEngine, LeaseDispatcher, Orchestrator, ReviewGate, TaskRegistry,
-    completion_evidence_from_dict, decision_facts_from_dict, task_from_dict,
+    DecisionPolicyEngine, ExecutorReportService, LeaseDispatcher, Orchestrator, ReviewGate, TaskRegistry,
+    completion_evidence_from_dict, decision_facts_from_dict, executor_report_from_dict, task_from_dict,
 )
 from .storage import Repository
 
@@ -78,6 +78,13 @@ def build_parser() -> argparse.ArgumentParser:
     task_reviews.add_argument("task_id")
     task_reviews.add_argument("--outcome", choices=["DONE", "NEEDS_FIX", "OWNER_CONFIRMATION_REQUIRED"])
     task_reviews.add_argument("--limit", type=int, default=100)
+    task_report = task_commands.add_parser("report")
+    task_report.add_argument("task_id")
+    task_report.add_argument("--file", required=True)
+    task_report.add_argument("--request-id", required=True)
+    task_reports = task_commands.add_parser("reports")
+    task_reports.add_argument("task_id")
+    task_reports.add_argument("--limit", type=int, default=100)
     task_render = task_commands.add_parser("render")
     task_render.add_argument("--project")
     task_render.add_argument("--output", required=True)
@@ -183,6 +190,20 @@ def main(argv=None) -> int:
             print(json.dumps(
                 repository.list_task_reviews(args.task_id, args.outcome, args.limit),
                 ensure_ascii=False, indent=2,
+            ))
+            return 0
+        if args.task_command == "report":
+            report = executor_report_from_dict(json.loads(Path(args.file).read_text(encoding="utf-8")))
+            if report["taskId"] != args.task_id:
+                raise ValueError("executor report taskId does not match the requested task")
+            print(json.dumps(
+                ExecutorReportService(repository).submit(report, args.request_id),
+                ensure_ascii=False, indent=2,
+            ))
+            return 0
+        if args.task_command == "reports":
+            print(json.dumps(
+                repository.list_executor_reports(args.task_id, args.limit), ensure_ascii=False, indent=2,
             ))
             return 0
         registry.render_to_file(Path(args.output), args.project)
