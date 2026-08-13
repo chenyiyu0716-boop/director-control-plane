@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from ..storage import Repository
+from .project_isolation import ISOLATED_PROJECT_IDS
 
 
 RISK_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -27,14 +28,23 @@ class BaselineConflictError(DispatcherError):
 
 
 class LeaseDispatcher:
-    def __init__(self, repository: Repository, default_ttl_seconds: int = 900):
+    def __init__(self, repository: Repository, default_ttl_seconds: int = 900,
+                 isolated_project_ids=None):
         self.repository = repository
         self.default_ttl_seconds = default_ttl_seconds
+        self.isolated_project_ids = (
+            ISOLATED_PROJECT_IDS if isolated_project_ids is None else frozenset(isolated_project_ids)
+        )
 
     def register_executor(self, executor_id: str, project_ids: List[str], max_risk: str,
                           enabled: bool = True) -> Dict[str, Any]:
         if not executor_id or not project_ids or max_risk not in RISK_RANK:
             raise DispatcherError("invalid executor profile")
+        isolated = sorted(set(project_ids) & self.isolated_project_ids)
+        if isolated:
+            raise ExecutorUnauthorizedError(
+                "projects are isolated from this dispatcher: {}".format(", ".join(isolated))
+            )
         now = self._now().isoformat()
         with self.repository.connect() as connection:
             for project_id in project_ids:
@@ -50,6 +60,8 @@ class LeaseDispatcher:
         return {"id": executor_id, "project_ids": sorted(set(project_ids)), "max_risk": max_risk, "enabled": enabled}
 
     def set_project_baseline(self, project_id: str, baseline_ref: str, actor: str) -> Dict[str, Any]:
+        if project_id in self.isolated_project_ids:
+            raise BaselineConflictError("project is isolated from this dispatcher")
         if not baseline_ref.strip() or not actor.strip():
             raise DispatcherError("baseline_ref and actor are required")
         now = self._now().isoformat()
@@ -263,7 +275,8 @@ class LeaseDispatcher:
 
     def _eligible(self, task: Dict[str, Any], profile: Dict[str, Any], project_id: Optional[str]) -> bool:
         return (
-            task["project_id"] in profile["project_ids"]
+            task["project_id"] not in self.isolated_project_ids
+            and task["project_id"] in profile["project_ids"]
             and (not project_id or task["project_id"] == project_id)
             and profile["id"] in task["allowed_executors"]
             and RISK_RANK[task["risk_level"]] <= RISK_RANK[profile["max_risk"]]

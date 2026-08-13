@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from ..domain.models import ControlTask, TaskPriority, TaskRisk
 from ..storage.repository import Repository
 from .task_registry import TaskValidationError, _required_text, source_fingerprint
+from .project_isolation import ISOLATED_PROJECT_IDS
 
 
 INTAKE_VERSION = "chief-intake/1.0.0"
@@ -114,10 +115,17 @@ def intake_fingerprint(intake: Dict[str, Any]) -> str:
 
 
 class ChiefIntakeService:
-    def __init__(self, repository: Repository):
+    def __init__(self, repository: Repository, isolated_project_ids=None):
         self.repository = repository
+        self.isolated_project_ids = (
+            ISOLATED_PROJECT_IDS if isolated_project_ids is None else frozenset(isolated_project_ids)
+        )
 
     def submit(self, intake: Dict[str, Any], actor: str, request_id: str) -> Dict[str, Any]:
+        if intake["projectId"] in self.isolated_project_ids:
+            raise TaskValidationError(
+                "project is isolated from this Chief runtime: {}".format(intake["projectId"])
+            )
         fingerprint = intake_fingerprint(intake)
         existing = self.repository.get_content_intake_by_fingerprint(intake["projectId"], fingerprint)
         if existing is not None:

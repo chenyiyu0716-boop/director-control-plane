@@ -20,7 +20,7 @@ class ContentIntakeTest(unittest.TestCase):
             root=self.root / "julius", ledger=self.root / "ledger.md", status=self.root / "status.json",
             knowledge_roots=[], enabled_agents=list(AgentType),
         ))
-        self.service = ChiefIntakeService(self.repository)
+        self.service = ChiefIntakeService(self.repository, isolated_project_ids=set())
 
     def tearDown(self):
         self.temp.cleanup()
@@ -49,6 +49,11 @@ class ContentIntakeTest(unittest.TestCase):
         self.assertEqual(result["task"]["workspace_roots"], [str(self.root / "julius" / ".workbuddy")])
         self.assertFalse((self.root / "julius").exists())
         self.assertIn("Do not produce Story Ready", result["task"]["scope"][2])
+
+    def test_default_runtime_rejects_julius_intake(self):
+        with self.assertRaisesRegex(ValueError, "isolated from this Chief runtime"):
+            ChiefIntakeService(self.repository).submit(self.intake(), "chief", "isolated-intake")
+        self.assertEqual(self.repository.list_tasks("julius"), [])
 
     def test_same_subject_and_source_is_deduplicated(self):
         first = self.service.submit(self.intake(), "chief", "intake-1")

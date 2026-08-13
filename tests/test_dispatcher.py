@@ -19,7 +19,7 @@ class DispatcherTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.repository = Repository(self.root / "control.sqlite3")
         self.repository.migrate()
-        for project_id in ("panel", "director"):
+        for project_id in ("panel", "director", "julius"):
             self.repository.upsert_project(ProjectConfig(
                 id=project_id, name=project_id, kind="control_plane", owner="Owner", root=self.root,
                 ledger=self.root / "TASKS.md", status=self.root / "STATE.md",
@@ -64,6 +64,12 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(before, after)
         with self.assertRaises(BaselineConflictError):
             self.dispatcher.get_project_baseline("director")
+
+    def test_julius_is_hard_isolated_from_dispatcher(self):
+        with self.assertRaisesRegex(ExecutorUnauthorizedError, "isolated"):
+            self.dispatcher.register_executor("julius-workbuddy", ["julius"], "low")
+        with self.assertRaisesRegex(BaselineConflictError, "isolated"):
+            self.dispatcher.set_project_baseline("julius", "386695f", "chief")
 
     def test_claim_is_idempotent_and_only_one_concurrent_executor_wins(self):
         task = self.ready_task()
