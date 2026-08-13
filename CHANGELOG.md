@@ -2,12 +2,6 @@
 
 ## Unreleased
 
-### TASK-021 — Deterministic Review Evidence Gate
-
-- Added versioned completion evidence for acceptance checks, tests, changed-file scope, risk findings, baseline, lease and commit identity.
-- Added deterministic `DONE`, `NEEDS_FIX` and `OWNER_CONFIRMATION_REQUIRED` outcomes with immutable review history and read-only API visibility.
-- Prevented stale evidence, active leases, replayed request IDs with changed evidence, and reuse of one completed commit across unrelated tasks.
-
 ### TASK-018 — Lease-based Executor Dispatcher
 
 - Added executor profiles with project and risk ceilings, registered project baselines, and exclusive task leases.
