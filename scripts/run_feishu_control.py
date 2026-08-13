@@ -14,6 +14,7 @@ from lark_oapi.event.callback.model.p2_card_action_trigger import (
 )
 
 from control_plane.adapters.feishu import event_to_dict, normalize_card_action
+from control_plane.adapters.feishu_cards import build_callback_status_card
 from control_plane.config import load_settings
 from control_plane.services import FeishuControlInbox
 from control_plane.services import EscalationDeliveryService
@@ -80,11 +81,21 @@ def main() -> None:
             stage = "inbox"
             acknowledgement = inbox.ingest(normalized)
             if acknowledgement["accepted"]:
-                content = "已接收，正在处理" if not acknowledgement["duplicate"] else "该操作已接收，请勿重复提交"
-                toast_type = "info"
+                stage = "process"
+                processed_items = inbox.process_pending(limit=20)
+                processed = next(
+                    (item for item in processed_items if item["event_id"] == normalized["event_id"]),
+                    {"event_id": normalized["event_id"], "status": "processed",
+                     "result": {"status": acknowledgement["status"]}},
+                )
+                succeeded = processed["status"] == "processed"
+                content = "已处理" if succeeded else "处理失败，任务保持安全等待"
+                toast_type = "success" if succeeded else "error"
+                response_card = build_callback_status_card(normalized["payload"], processed)
             else:
                 content = "当前账号没有控制权限"
                 toast_type = "error"
+                response_card = None
         except Exception as error:
             print(
                 "Feishu callback rejected at {}: {}".format(
@@ -94,7 +105,11 @@ def main() -> None:
             )
             content = "请求格式无效，未执行任何操作"
             toast_type = "error"
-        return P2CardActionTriggerResponse({"toast": {"type": toast_type, "content": content}})
+            response_card = None
+        response = {"toast": {"type": toast_type, "content": content}}
+        if response_card is not None:
+            response["card"] = {"type": "raw", "data": response_card}
+        return P2CardActionTriggerResponse(response)
 
     handler = (
         lark.EventDispatcherHandler.builder("", "")

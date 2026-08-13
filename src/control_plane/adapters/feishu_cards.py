@@ -94,6 +94,31 @@ def build_escalation_card(event: Dict[str, Any], escalation_id: str,
     }
 
 
+def build_callback_status_card(payload: Dict[str, Any], processed: Dict[str, Any]) -> Dict[str, Any]:
+    action = str(payload.get("action") or "").strip()
+    result = processed.get("result") or {}
+    succeeded = processed.get("status") == "processed"
+    labels = {"approve": "已批准", "deny": "已拒绝", "later": "稍后处理"}
+    label = labels.get(action, "已处理") if succeeded else "处理失败，未执行"
+    icon = "✅" if action == "approve" and succeeded else ("⏸️" if action == "later" and succeeded else "❌")
+    template = "green" if action == "approve" and succeeded else ("orange" if action == "later" and succeeded else "red")
+    detail = "裁决已安全写入，原操作按钮已关闭。"
+    if not succeeded:
+        detail = "裁决未写入，相关任务继续保持安全等待。"
+    elif result.get("status"):
+        detail = "裁决已安全写入为 **{}**，原操作按钮已关闭。".format(result["status"])
+    return {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "template": template,
+            "title": {"tag": "plain_text", "content": "{} {}".format(icon, label)},
+        },
+        "elements": [
+            {"tag": "markdown", "content": detail},
+        ],
+    }
+
+
 def build_requirement_card(project_id: str, nonce: str, expires_at: str) -> Dict[str, Any]:
     return {
         "schema": "2.0",

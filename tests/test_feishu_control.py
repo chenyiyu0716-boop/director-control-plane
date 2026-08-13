@@ -7,7 +7,7 @@ from pathlib import Path
 
 from control_plane.adapters.feishu import normalize_card_action
 from control_plane.adapters.feishu_cards import (
-    build_callback_test_card, build_decision_card, build_intake_confirmation_card,
+    build_callback_status_card, build_callback_test_card, build_decision_card, build_intake_confirmation_card,
     build_requirement_card,
 )
 from control_plane.config import ProjectConfig
@@ -258,6 +258,22 @@ class FeishuControlTest(unittest.TestCase):
         self.assertEqual(handler.calls[0], (
             "b" * 64, "approve", "ou_owner", "approved", "fake tests only",
         ))
+
+    def test_callback_status_card_marks_result_and_removes_actions(self):
+        approved = build_callback_status_card(
+            {"action": "approve"},
+            {"status": "processed", "result": {"status": "APPROVED"}},
+        )
+        self.assertEqual(approved["header"]["template"], "green")
+        self.assertIn("已批准", approved["header"]["title"]["content"])
+        self.assertIn("APPROVED", approved["elements"][0]["content"])
+        self.assertNotIn("button", str(approved))
+
+        failed = build_callback_status_card(
+            {"action": "approve"}, {"status": "rejected", "result": {"error": "stale"}},
+        )
+        self.assertEqual(failed["header"]["template"], "red")
+        self.assertIn("未执行", failed["header"]["title"]["content"])
 
 
 if __name__ == "__main__":
