@@ -193,6 +193,25 @@ CREATE TABLE IF NOT EXISTS executor_report (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS content_intake (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES project(id),
+  task_id TEXT NOT NULL UNIQUE REFERENCES control_task(id),
+  intake_version TEXT NOT NULL,
+  intake_type TEXT NOT NULL CHECK(intake_type IN ('knowledge_ingest', 'candidate_research')),
+  subject_name TEXT NOT NULL,
+  subject_key TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  target_stage TEXT NOT NULL CHECK(target_stage IN ('candidate', 'knowledge', 'story_ready', 'brief')),
+  sources_json TEXT NOT NULL,
+  assertions_json TEXT NOT NULL,
+  intake_fingerprint TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  request_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, intake_fingerprint)
+);
+
 CREATE TABLE IF NOT EXISTS feishu_inbox_event (
   event_id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL,
@@ -280,6 +299,7 @@ CREATE INDEX IF NOT EXISTS idx_task_decision_outcome_created ON task_decision(ou
 CREATE INDEX IF NOT EXISTS idx_task_review_task_created ON task_review(task_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_review_outcome_created ON task_review(outcome, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_executor_report_task_created ON executor_report(task_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_content_intake_project_created ON content_intake(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feishu_inbox_status_received ON feishu_inbox_event(status, received_at);
 CREATE INDEX IF NOT EXISTS idx_owner_decision_task_created ON owner_decision(task_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_requirement_intake_project_status ON requirement_intake(project_id, status, created_at DESC);

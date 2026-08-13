@@ -8,8 +8,9 @@ from .api.server import serve
 from .config import ProjectConfig, load_settings
 from .domain.models import AgentType, DecisionOutcome, TaskState
 from .services import (
-    DecisionPolicyEngine, ExecutorReportService, LeaseDispatcher, Orchestrator, ReviewGate, TaskRegistry,
-    completion_evidence_from_dict, decision_facts_from_dict, executor_report_from_dict, task_from_dict,
+    ChiefIntakeService, DecisionPolicyEngine, ExecutorReportService, LeaseDispatcher, Orchestrator,
+    ReviewGate, TaskRegistry, completion_evidence_from_dict, content_intake_from_dict,
+    decision_facts_from_dict, executor_report_from_dict, task_from_dict,
 )
 from .storage import Repository
 
@@ -85,6 +86,13 @@ def build_parser() -> argparse.ArgumentParser:
     task_reports = task_commands.add_parser("reports")
     task_reports.add_argument("task_id")
     task_reports.add_argument("--limit", type=int, default=100)
+    task_intake = task_commands.add_parser("intake")
+    task_intake.add_argument("--file", required=True)
+    task_intake.add_argument("--actor", required=True)
+    task_intake.add_argument("--request-id", required=True)
+    task_intakes = task_commands.add_parser("intakes")
+    task_intakes.add_argument("--project")
+    task_intakes.add_argument("--limit", type=int, default=100)
     task_render = task_commands.add_parser("render")
     task_render.add_argument("--project")
     task_render.add_argument("--output", required=True)
@@ -204,6 +212,18 @@ def main(argv=None) -> int:
         if args.task_command == "reports":
             print(json.dumps(
                 repository.list_executor_reports(args.task_id, args.limit), ensure_ascii=False, indent=2,
+            ))
+            return 0
+        if args.task_command == "intake":
+            intake = content_intake_from_dict(json.loads(Path(args.file).read_text(encoding="utf-8")))
+            print(json.dumps(
+                ChiefIntakeService(repository).submit(intake, args.actor, args.request_id),
+                ensure_ascii=False, indent=2,
+            ))
+            return 0
+        if args.task_command == "intakes":
+            print(json.dumps(
+                repository.list_content_intakes(args.project, args.limit), ensure_ascii=False, indent=2,
             ))
             return 0
         registry.render_to_file(Path(args.output), args.project)

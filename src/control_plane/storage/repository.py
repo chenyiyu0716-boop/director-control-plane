@@ -80,6 +80,15 @@ class Repository:
                 }), utc_now()),
             )
 
+    def get_project(self, project_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM project WHERE id = ?", (project_id,)).fetchone()
+        if not row:
+            return None
+        record = dict(row)
+        record["config"] = json.loads(record.pop("config_json"))
+        return record
+
     def start_run(self, project_id: str, agent_type: str, trigger: str) -> str:
         run_id = str(uuid.uuid4())
         now = utc_now()
@@ -534,6 +543,89 @@ class Repository:
             raise TaskNotFoundError("executor report was not persisted")
         return stored
 
+    def create_content_intake_and_task(self, intake: Dict[str, Any], fingerprint: str,
+                                       task: ControlTask, task_fingerprint: str,
+                                       actor: str, request_id: str) -> Dict[str, Any]:
+        intake_id = str(uuid.uuid4())
+        now = utc_now()
+        with self.connect() as connection:
+            if not connection.execute("SELECT id FROM project WHERE id = ?", (task.project_id,)).fetchone():
+                raise TaskNotFoundError("project is not registered: {}".format(task.project_id))
+            try:
+                connection.execute(
+                    """INSERT INTO control_task
+                       (id, project_id, title, objective, scope_json, acceptance_json, priority, state,
+                        version, risk_level, allowed_executors_json, workspace_roots_json, source_uri,
+                        source_fingerprint, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', 1, ?, ?, ?, ?, ?, ?, ?)""",
+                    (task.id, task.project_id, task.title, task.objective, json_text(task.scope),
+                     json_text(task.acceptance), task.priority.value, task.risk_level.value,
+                     json_text(task.allowed_executors), json_text(task.workspace_roots), task.source_uri,
+                     task_fingerprint, now, now),
+                )
+                connection.execute(
+                    """INSERT INTO control_task_transition
+                       (id, task_id, from_state, to_state, actor, reason, previous_version,
+                        result_version, request_id, created_at)
+                       VALUES (?, ?, NULL, 'DRAFT', ?, 'content intake published as draft', 0, 1, ?, ?)""",
+                    (str(uuid.uuid4()), task.id, actor, request_id + ":task", now),
+                )
+                connection.execute(
+                    """INSERT INTO content_intake
+                       (id, project_id, task_id, intake_version, intake_type, subject_name, subject_key,
+                        objective, target_stage, sources_json, assertions_json, intake_fingerprint,
+                        actor, request_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (intake_id, intake["projectId"], task.id, intake["intakeVersion"], intake["intakeType"],
+                     intake["subjectName"], intake["subjectKey"], intake["objective"], intake["targetStage"],
+                     json_text(intake["sources"]), json_text(intake["assertions"]), fingerprint,
+                     actor, request_id, now),
+                )
+                self._audit(connection, actor, "content_intake.created", "content_intake", intake_id,
+                            None, {"task_id": task.id, "state": "DRAFT"}, request_id=request_id)
+            except sqlite3.IntegrityError as error:
+                existing = connection.execute(
+                    "SELECT id FROM content_intake WHERE project_id = ? AND intake_fingerprint = ?",
+                    (intake["projectId"], fingerprint),
+                ).fetchone()
+                if existing:
+                    stored = self.get_content_intake(str(existing["id"]))
+                    return {"intake": stored, "task": self.get_task(stored["task_id"]), "duplicate": True}
+                raise DuplicateTaskError("content intake or task already exists") from error
+        return {"intake": self.get_content_intake(intake_id), "task": self.get_task(task.id), "duplicate": False}
+
+    def get_content_intake(self, intake_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM content_intake WHERE id = ?", (intake_id,)).fetchone()
+        return self._content_intake_record(row) if row else None
+
+    def get_content_intake_by_fingerprint(self, project_id: str, fingerprint: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM content_intake WHERE project_id = ? AND intake_fingerprint = ?",
+                (project_id, fingerprint),
+            ).fetchone()
+        return self._content_intake_record(row) if row else None
+
+    def list_content_intakes(self, project_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM content_intake"
+        values: List[Any] = []
+        if project_id:
+            query += " WHERE project_id = ?"
+            values.append(project_id)
+        query += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
+        values.append(limit)
+        with self.connect() as connection:
+            rows = connection.execute(query, tuple(values)).fetchall()
+        return [self._content_intake_record(row) for row in rows]
+
+    @staticmethod
+    def _content_intake_record(row: sqlite3.Row) -> Dict[str, Any]:
+        record = dict(row)
+        record["sources"] = json.loads(record.pop("sources_json"))
+        record["assertions"] = json.loads(record.pop("assertions_json"))
+        return record
+
     def get_executor_report(self, report_id: str) -> Optional[Dict[str, Any]]:
         with self.connect() as connection:
             row = connection.execute("SELECT * FROM executor_report WHERE id = ?", (report_id,)).fetchone()
@@ -828,7 +920,7 @@ class Repository:
             "project", "agent_run", "finding", "review_item", "check_result", "release_report",
             "control_task", "control_task_transition", "task_decision", "task_review", "feishu_inbox_event",
             "owner_decision", "requirement_intake", "executor_profile", "project_baseline",
-            "task_lease", "dispatcher_operation", "executor_report", "audit_event",
+            "task_lease", "dispatcher_operation", "executor_report", "content_intake", "audit_event",
         }
         if table not in allowed:
             raise ValueError("unsupported table")

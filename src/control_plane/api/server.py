@@ -91,6 +91,14 @@ def create_handler(repository: Repository):
                     "items": repository.list_executor_reports(task_id, limit), "limit": limit,
                 })
                 return
+            if parsed.path == "/api/content-intakes":
+                query = parse_qs(parsed.query)
+                limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+                project_id = query.get("project_id", [None])[0]
+                self._json(200, {
+                    "items": repository.list_content_intakes(project_id, limit), "limit": limit,
+                })
+                return
             if parsed.path.startswith("/api/tasks/"):
                 parts = [part for part in parsed.path.split("/") if part]
                 if len(parts) == 3:

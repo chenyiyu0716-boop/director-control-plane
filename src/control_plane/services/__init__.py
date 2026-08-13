@@ -15,6 +15,9 @@ from .executor_report import (
     REPORT_VERSION, ExecutorReportService, completion_evidence_from_report,
     executor_report_from_dict, report_fingerprint,
 )
+from .content_intake import (
+    INTAKE_VERSION, ChiefIntakeService, content_intake_from_dict, intake_fingerprint,
+)
 
 __all__ = [
     "DecisionPolicyEngine", "IllegalTaskTransitionError", "Orchestrator", "POLICY_VERSION",
@@ -26,5 +29,6 @@ __all__ = [
     "LeaseDispatcher",
     "REPORT_VERSION", "ExecutorReportService", "completion_evidence_from_report",
     "executor_report_from_dict", "report_fingerprint",
+    "INTAKE_VERSION", "ChiefIntakeService", "content_intake_from_dict", "intake_fingerprint",
     "decision_facts_from_dict", "task_from_dict",
 ]

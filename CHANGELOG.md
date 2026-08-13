@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### TASK-029 — Chief Content Intake
+
+- Added a Julius content intake contract for `knowledge_ingest` and `candidate_research` with source, subject and target-stage normalization.
+- Intakes deduplicate by person and source identity, separate facts/quotes from analysis, and atomically publish exactly one DRAFT task.
+- Intake never writes Julius, enters READY, or skips Codex review toward Story Ready/Brief.
+
 ### TASK-028 — Executor Report
 
 - Added immutable executor reports bound to the exact REVIEW task, completed lease, executor identity and lease baseline.
