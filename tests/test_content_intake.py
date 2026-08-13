@@ -45,6 +45,8 @@ class ContentIntakeTest(unittest.TestCase):
         self.assertFalse(result["duplicate"])
         self.assertEqual(result["task"]["state"], "DRAFT")
         self.assertEqual(result["intake"]["target_stage"], "story_ready")
+        self.assertEqual(result["task"]["allowed_executors"], ["julius-workbuddy"])
+        self.assertEqual(result["task"]["workspace_roots"], [str(self.root / "julius" / ".workbuddy")])
         self.assertFalse((self.root / "julius").exists())
         self.assertIn("Do not produce Story Ready", result["task"]["scope"][2])
 

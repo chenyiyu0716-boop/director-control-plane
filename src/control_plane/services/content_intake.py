@@ -128,6 +128,9 @@ class ChiefIntakeService:
         if project is None:
             raise TaskValidationError("project is not registered: {}".format(intake["projectId"]))
         project_root = project["config"]["root"]
+        is_julius = intake["projectId"] == "julius"
+        allowed_executor = "julius-workbuddy" if is_julius else "workbuddy-hy3"
+        staging_root = project_root + ("/.workbuddy" if is_julius else "/.agent-ops")
         task = ControlTask(
             id=task_id, project_id=intake["projectId"],
             title="{}: {}".format(intake["intakeType"], intake["subjectName"]),
@@ -143,8 +146,8 @@ class ChiefIntakeService:
                 "Executor Report includes provenance and no unregistered source body.",
             ],
             priority=TaskPriority.P1, risk_level=TaskRisk.LOW,
-            allowed_executors=["workbuddy-hy3"],
-            workspace_roots=[project_root + "/.agent-ops"], dependencies=[],
+            allowed_executors=[allowed_executor],
+            workspace_roots=[staging_root], dependencies=[],
             source_uri="chief-intake://{}".format(fingerprint),
         )
         return self.repository.create_content_intake_and_task(
