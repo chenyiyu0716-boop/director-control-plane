@@ -66,5 +66,14 @@ path. A failed run remains visible as a failed `AgentRun`; do not retry indefini
 ## Backup and recovery
 
 The only mutable runtime asset is `var/control-plane.sqlite3`. Stop the API and Feishu worker before copying it.
+
+## Deployment source consistency
+
+Projects with a `deployment` configuration are checked against live Docker Compose metadata and bind mounts.
+The observer resolves each required service to the Git worktree that actually supplies its source, then compares
+that worktree HEAD with the configured project main HEAD. Missing Docker metadata, an unknown source, mixed
+worktrees, or a diverged history fails closed and creates a deployment-drift finding. A non-healthy result blocks
+release and automatic baseline synchronization; the observer never switches worktrees, restarts containers, or
+changes services.
 Restoring the database does not modify any connected project. Deleting the database removes Control
 Plane history only and must still be treated as an audited operator action.

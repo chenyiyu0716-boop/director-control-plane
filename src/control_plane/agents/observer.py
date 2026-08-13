@@ -1,6 +1,7 @@
 import time
 
 from ..adapters.git import git
+from ..adapters.deployment import evaluate_deployment, inspect_compose_runtime
 from ..config import ProjectConfig
 from ..domain.models import AgentResult, Check, Finding, RunStatus
 
@@ -23,6 +24,25 @@ class ObserverAgent:
                 detail="无法只读获取当前提交。", evidence={"root": str(project.root)},
                 recommendation="检查仓库路径与读取权限。",
             ))
+        if project.deployment:
+            started = time.monotonic()
+            deployment = evaluate_deployment(
+                project.root, project.deployment, inspect_compose_runtime(project.deployment),
+            )
+            latency = int((time.monotonic() - started) * 1000)
+            checks.append(Check(
+                "deployment", "runtime-source-consistency", deployment["status"],
+                deployment["evidence"], latency,
+            ))
+            if deployment["status"] != "healthy":
+                findings.append(Finding(
+                    category="deployment-drift",
+                    severity="critical" if deployment["status"] == "critical" else "warning",
+                    title="运行态部署来源与主线不一致",
+                    detail="部署一致性检查失败：{}。".format(deployment["reason"]),
+                    evidence=deployment["evidence"],
+                    recommendation="阻断发布和自动基线同步；审计运行态与 main 的三方差异后再由 Owner 决策。",
+                ))
         states = [item.status for item in checks]
         overall = "critical" if "critical" in states else "partial" if "unknown" in states or "warning" in states else "healthy"
         return AgentResult(

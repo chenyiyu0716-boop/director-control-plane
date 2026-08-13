@@ -10,6 +10,10 @@
       "ledger": "docs/2026-08/TASK_QUEUE.md",
       "status": "docs/2026-08/PROJECT_STATUS.json",
       "knowledge_roots": ["docs"],
+      "deployment": {
+        "composeProject": "director",
+        "requiredServices": ["backend", "frontend", "worker"]
+      },
       "enabled_agents": ["knowledge", "observer", "release"]
     }
   ]

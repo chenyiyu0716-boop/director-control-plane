@@ -2,9 +2,15 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from .domain.models import AgentType
+
+
+@dataclass(frozen=True)
+class DeploymentConfig:
+    compose_project: str
+    required_services: List[str]
 
 
 @dataclass(frozen=True)
@@ -18,6 +24,7 @@ class ProjectConfig:
     status: Path
     knowledge_roots: List[Path]
     enabled_agents: List[AgentType]
+    deployment: Optional[DeploymentConfig] = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +45,13 @@ def load_settings(config_path: str = None) -> Settings:
     for item in payload.get("projects", []):
         root = Path(item["root"]).expanduser().resolve()
         resolve_project_path = lambda value: (Path(value).expanduser() if Path(value).expanduser().is_absolute() else root / value).resolve()
+        deployment_payload = item.get("deployment")
+        deployment = None
+        if deployment_payload:
+            deployment = DeploymentConfig(
+                compose_project=str(deployment_payload["composeProject"]),
+                required_services=[str(value) for value in deployment_payload.get("requiredServices", [])],
+            )
         projects.append(ProjectConfig(
             id=item["id"],
             name=item["name"],
@@ -48,5 +62,6 @@ def load_settings(config_path: str = None) -> Settings:
             status=resolve_project_path(item["status"]),
             knowledge_roots=[resolve_project_path(value) for value in item.get("knowledge_roots", [])],
             enabled_agents=[AgentType(value) for value in item.get("enabled_agents", [agent.value for agent in AgentType])],
+            deployment=deployment,
         ))
     return Settings(database=database, projects=projects)
