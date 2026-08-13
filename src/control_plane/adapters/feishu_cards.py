@@ -79,14 +79,16 @@ def build_escalation_card(event: Dict[str, Any], escalation_id: str,
             {"tag": "markdown", "content": (
                 "任务：**{}**\n原因：**{}**\n\n{}\n\n未回复时任务保持安全挂起。"
             ).format(event.get("task_id") or "未关联任务", event["reason_code"], event["summary"])},
-            {"tag": "form", "name": "escalation_decision", "elements": [
-                {"tag": "input", "name": "reason", "label": _text("决定说明"),
-                 "placeholder": _text("可填写原因或限制条件")},
-                {"tag": "input", "name": "parameters", "label": _text("调整参数（可选）"),
-                 "placeholder": _text("填写范围、时间或其他约束")},
-                _submit_button("批准", "primary", dict(base, action="approve")),
-                _submit_button("稍后处理", "default", dict(base, action="later")),
-                _submit_button("拒绝", "danger", dict(base, action="deny")),
+            {"tag": "column_set", "flex_mode": "none", "horizontal_spacing": "8px", "columns": [
+                {"tag": "column", "width": "auto", "elements": [
+                    _button("批准", "primary", dict(base, action="approve")),
+                ]},
+                {"tag": "column", "width": "auto", "elements": [
+                    _button("稍后处理", "default", dict(base, action="later")),
+                ]},
+                {"tag": "column", "width": "auto", "elements": [
+                    _button("拒绝", "danger", dict(base, action="deny")),
+                ]},
             ]},
         ]},
     }

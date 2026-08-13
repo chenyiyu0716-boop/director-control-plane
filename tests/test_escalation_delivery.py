@@ -52,6 +52,13 @@ class EscalationDeliveryTest(unittest.TestCase):
         self.assertEqual(saved["last_delivery_key"], self.transport.sent[0][2])
         self.assertEqual(len(saved["last_delivery_key"]), 32)
         self.assertNotIn("nonce", saved)
+        columns = self.transport.sent[0][1]["body"]["elements"][-1]["columns"]
+        actions = [column["elements"][0] for column in columns]
+        self.assertTrue(all(action["behaviors"][0]["type"] == "callback" for action in actions))
+        self.assertEqual(
+            [action["behaviors"][0]["value"]["action"] for action in actions],
+            ["approve", "later", "deny"],
+        )
 
         self.now += timedelta(hours=1)
         self.service.poll()
