@@ -53,6 +53,15 @@ class Repository:
         schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
         with self.connect() as connection:
             connection.executescript(schema)
+            review_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(task_review)").fetchall()
+            }
+            if "commit_ref" not in review_columns:
+                connection.execute("ALTER TABLE task_review ADD COLUMN commit_ref TEXT")
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_task_review_done_commit "
+                "ON task_review(commit_ref) WHERE outcome = 'DONE'"
+            )
 
     def upsert_project(self, project: ProjectConfig) -> None:
         with self.connect() as connection:
@@ -411,6 +420,124 @@ class Repository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_project_baseline(self, project_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT project_id, baseline_ref, updated_by, updated_at FROM project_baseline WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def get_task_lease(self, lease_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM task_lease WHERE id = ?", (lease_id,)).fetchone()
+        return dict(row) if row else None
+
+    def apply_review_result(self, task_id: str, task_version: int, outcome: str, gate_version: str,
+                            reasons: List[str], matched_rules: List[str], evidence: Dict[str, Any],
+                            evidence_fingerprint: str, executor_id: str, lease_id: str,
+                            baseline_ref: str, commit_ref: str, actor: str, request_id: str) -> Dict[str, Any]:
+        """Persist a review-gate outcome; only a DONE outcome transitions the task."""
+        now = utc_now()
+        review_id = str(uuid.uuid4())
+        result_version: Optional[int] = None
+        with self.connect() as connection:
+            current = connection.execute("SELECT state, version FROM control_task WHERE id = ?", (task_id,)).fetchone()
+            if not current:
+                raise TaskNotFoundError("task is not registered: {}".format(task_id))
+            if current["state"] != TaskState.REVIEW.value or int(current["version"]) != task_version:
+                raise TaskVersionConflictError(
+                    "expected REVIEW v{}, found {} v{}".format(
+                        task_version, current["state"], current["version"]
+                    )
+                )
+            if outcome == "DONE":
+                result_version = task_version + 1
+                updated = connection.execute(
+                    """UPDATE control_task SET state = ?, version = ?, updated_at = ?
+                       WHERE id = ? AND state = ? AND version = ?""",
+                    (TaskState.DONE.value, result_version, now, task_id,
+                     TaskState.REVIEW.value, task_version),
+                )
+                if updated.rowcount != 1:
+                    raise TaskVersionConflictError("task changed during review")
+                try:
+                    connection.execute(
+                        """INSERT INTO control_task_transition
+                           (id, task_id, from_state, to_state, actor, reason, previous_version,
+                            result_version, request_id, created_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (str(uuid.uuid4()), task_id, TaskState.REVIEW.value, TaskState.DONE.value, actor,
+                         "review gate {}: {}".format(gate_version, "; ".join(reasons)),
+                         task_version, result_version, request_id, now),
+                    )
+                except sqlite3.IntegrityError as error:
+                    raise TaskVersionConflictError("review request id already used") from error
+            try:
+                connection.execute(
+                    """INSERT INTO task_review
+                       (id, task_id, task_version, result_version, gate_version, outcome, reasons_json,
+                        matched_rules_json, evidence_json, evidence_fingerprint, executor_id, lease_id,
+                        baseline_ref, commit_ref, actor, request_id, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (review_id, task_id, task_version, result_version, gate_version, outcome,
+                     json_text(reasons), json_text(matched_rules), json_text(evidence),
+                     evidence_fingerprint, executor_id, lease_id, baseline_ref, commit_ref,
+                     actor, request_id, now),
+                )
+            except sqlite3.IntegrityError as error:
+                raise TaskVersionConflictError("review request id or completed commit already used") from error
+            self._audit(
+                connection, actor, "task.review_evaluated", "control_task", task_id,
+                {"state": current["state"], "version": int(current["version"])},
+                {"outcome": outcome, "review_id": review_id, "gate_version": gate_version,
+                 "evidence_fingerprint": evidence_fingerprint,
+                 "state": TaskState.DONE.value if result_version else current["state"],
+                 "version": result_version or int(current["version"])},
+                request_id=request_id,
+            )
+        review = self.get_task_review(review_id)
+        task = self.get_task(task_id)
+        if review is None or task is None:
+            raise TaskNotFoundError("review result was not persisted: {}".format(task_id))
+        return {"review": review, "task": task}
+
+    def get_task_review(self, review_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM task_review WHERE id = ?", (review_id,)).fetchone()
+        return self._review_record(row) if row else None
+
+    def get_task_review_by_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as connection:
+            row = connection.execute("SELECT * FROM task_review WHERE request_id = ?", (request_id,)).fetchone()
+        return self._review_record(row) if row else None
+
+    def list_task_reviews(self, task_id: Optional[str] = None, outcome: Optional[str] = None,
+                          limit: int = 100) -> List[Dict[str, Any]]:
+        clauses = []
+        values: List[Any] = []
+        if task_id:
+            clauses.append("task_id = ?")
+            values.append(task_id)
+        if outcome:
+            clauses.append("outcome = ?")
+            values.append(outcome)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        values.append(limit)
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM task_review{} ORDER BY created_at DESC, rowid DESC LIMIT ?".format(where),
+                tuple(values),
+            ).fetchall()
+        return [self._review_record(row) for row in rows]
+
+    @staticmethod
+    def _review_record(row: sqlite3.Row) -> Dict[str, Any]:
+        record = dict(row)
+        for field_name in ("reasons_json", "matched_rules_json", "evidence_json"):
+            record[field_name[:-5]] = json.loads(record.pop(field_name))
+        return record
+
     def receive_feishu_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         with self.connect(timeout=0.25) as connection:
             existing = connection.execute(
@@ -642,7 +769,7 @@ class Repository:
     def list_rows(self, table: str, limit: int = 100) -> List[Dict[str, Any]]:
         allowed = {
             "project", "agent_run", "finding", "review_item", "check_result", "release_report",
-            "control_task", "control_task_transition", "task_decision", "feishu_inbox_event",
+            "control_task", "control_task_transition", "task_decision", "task_review", "feishu_inbox_event",
             "owner_decision", "requirement_intake", "executor_profile", "project_baseline",
             "task_lease", "dispatcher_operation", "audit_event",
         }

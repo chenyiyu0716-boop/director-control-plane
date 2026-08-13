@@ -7,7 +7,10 @@ from typing import Iterable
 from .api.server import serve
 from .config import ProjectConfig, load_settings
 from .domain.models import AgentType, DecisionOutcome, TaskState
-from .services import DecisionPolicyEngine, LeaseDispatcher, Orchestrator, TaskRegistry, decision_facts_from_dict, task_from_dict
+from .services import (
+    DecisionPolicyEngine, LeaseDispatcher, Orchestrator, ReviewGate, TaskRegistry,
+    completion_evidence_from_dict, decision_facts_from_dict, task_from_dict,
+)
 from .storage import Repository
 
 
@@ -65,6 +68,16 @@ def build_parser() -> argparse.ArgumentParser:
     task_decisions.add_argument("task_id")
     task_decisions.add_argument("--outcome", choices=[value.value for value in DecisionOutcome])
     task_decisions.add_argument("--limit", type=int, default=100)
+    task_review = task_commands.add_parser("review")
+    task_review.add_argument("task_id")
+    task_review.add_argument("--evidence", required=True)
+    task_review.add_argument("--actor", required=True)
+    task_review.add_argument("--request-id")
+    task_review.add_argument("--dry-run", action="store_true")
+    task_reviews = task_commands.add_parser("reviews")
+    task_reviews.add_argument("task_id")
+    task_reviews.add_argument("--outcome", choices=["DONE", "NEEDS_FIX", "OWNER_CONFIRMATION_REQUIRED"])
+    task_reviews.add_argument("--limit", type=int, default=100)
     task_render = task_commands.add_parser("render")
     task_render.add_argument("--project")
     task_render.add_argument("--output", required=True)
@@ -151,6 +164,24 @@ def main(argv=None) -> int:
         if args.task_command == "decisions":
             print(json.dumps(
                 repository.list_task_decisions(args.task_id, args.outcome, args.limit),
+                ensure_ascii=False, indent=2,
+            ))
+            return 0
+        if args.task_command == "review":
+            payload = json.loads(Path(args.evidence).read_text(encoding="utf-8"))
+            evidence = completion_evidence_from_dict(payload)
+            if evidence["taskId"] != args.task_id:
+                raise ValueError("evidence taskId does not match the requested task")
+            gate = ReviewGate(repository)
+            if args.dry_run:
+                result = gate.evaluate(evidence)
+            else:
+                result = gate.review(evidence, args.actor, args.request_id)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.task_command == "reviews":
+            print(json.dumps(
+                repository.list_task_reviews(args.task_id, args.outcome, args.limit),
                 ensure_ascii=False, indent=2,
             ))
             return 0

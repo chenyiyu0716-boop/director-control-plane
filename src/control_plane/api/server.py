@@ -63,6 +63,18 @@ def create_handler(repository: Repository):
                 task_id = query.get("task_id", [None])[0]
                 self._json(200, {"items": repository.list_owner_decisions(task_id, limit), "limit": limit})
                 return
+            if parsed.path == "/api/task-reviews":
+                query = parse_qs(parsed.query)
+                limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+                task_id = query.get("task_id", [None])[0]
+                outcome = query.get("outcome", [None])[0]
+                if outcome and outcome not in {"DONE", "NEEDS_FIX", "OWNER_CONFIRMATION_REQUIRED"}:
+                    self._json(400, {"error": "invalid_review_outcome"})
+                    return
+                self._json(200, {
+                    "items": repository.list_task_reviews(task_id, outcome, limit), "limit": limit,
+                })
+                return
             if parsed.path == "/api/requirement-intakes":
                 query = parse_qs(parsed.query)
                 limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
@@ -90,6 +102,17 @@ def create_handler(repository: Repository):
                         self._json(404, {"error": "task_not_found"})
                         return
                     self._json(200, {"items": repository.list_task_decisions(task_id=parts[2])})
+                    return
+                if len(parts) == 4 and parts[3] == "reviews":
+                    task = repository.get_task(parts[2])
+                    if not task:
+                        self._json(404, {"error": "task_not_found"})
+                        return
+                    query = parse_qs(parsed.query)
+                    limit = min(max(int(query.get("limit", ["100"])[0]), 1), 500)
+                    self._json(200, {
+                        "items": repository.list_task_reviews(parts[2], None, limit), "limit": limit,
+                    })
                     return
             self._json(404, {"error": "not_found"})
 

@@ -159,6 +159,26 @@ CREATE TABLE IF NOT EXISTS task_decision (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS task_review (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES control_task(id) ON DELETE CASCADE,
+  task_version INTEGER NOT NULL,
+  result_version INTEGER,
+  gate_version TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK(outcome IN ('DONE', 'NEEDS_FIX', 'OWNER_CONFIRMATION_REQUIRED')),
+  reasons_json TEXT NOT NULL,
+  matched_rules_json TEXT NOT NULL,
+  evidence_json TEXT NOT NULL,
+  evidence_fingerprint TEXT NOT NULL,
+  executor_id TEXT NOT NULL,
+  lease_id TEXT NOT NULL,
+  baseline_ref TEXT NOT NULL,
+  commit_ref TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  request_id TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS feishu_inbox_event (
   event_id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL,
@@ -243,6 +263,8 @@ CREATE INDEX IF NOT EXISTS idx_control_task_dependency_target ON control_task_de
 CREATE INDEX IF NOT EXISTS idx_control_task_transition_task_created ON control_task_transition(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_task_decision_task_created ON task_decision(task_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_decision_outcome_created ON task_decision(outcome, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_review_task_created ON task_review(task_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_review_outcome_created ON task_review(outcome, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feishu_inbox_status_received ON feishu_inbox_event(status, received_at);
 CREATE INDEX IF NOT EXISTS idx_owner_decision_task_created ON owner_decision(task_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_requirement_intake_project_status ON requirement_intake(project_id, status, created_at DESC);
