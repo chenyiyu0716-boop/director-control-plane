@@ -1,0 +1,16 @@
+{
+  "database": "var/julius/control-plane.sqlite3",
+  "projects": [
+    {
+      "id": "julius",
+      "name": "尤里乌斯",
+      "kind": "business_agent",
+      "owner": "Project Owner",
+      "root": "/absolute/path/to/dynamic-poster-remotion",
+      "ledger": "../10期实验总表.md",
+      "status": "workflow/episode-001/production.json",
+      "knowledge_roots": ["workflow"],
+      "enabled_agents": []
+    }
+  ]
+}

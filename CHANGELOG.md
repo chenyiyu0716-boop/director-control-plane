@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-13
+
+- Added an isolated Julius onboarding contract and read-only shadow runner.
+- Added deterministic evidence review, Julius-only executor/baseline boundaries, rejection probes and idle guard tests.
+- Kept Panel state, real Feishu delivery and Julius production files outside the onboarding write scope.
+
 ## Unreleased
 
 ### TASK-029 — Chief Content Intake

@@ -18,6 +18,11 @@ from .executor_report import (
 from .content_intake import (
     INTAKE_VERSION, ChiefIntakeService, content_intake_from_dict, intake_fingerprint,
 )
+from .julius_onboarding import (
+    JULIUS_CORRECTION_EXECUTOR_ID, JULIUS_EXECUTOR_ID, JULIUS_PROJECT_ID,
+    JuliusIdleGuard, JuliusIsolationError, JuliusStatePaths, agent_ops_records, parse_episode_ledger,
+    review_shadow_task, run_read_only_shadow, shadow_baseline,
+)
 
 __all__ = [
     "DecisionPolicyEngine", "IllegalTaskTransitionError", "Orchestrator", "POLICY_VERSION",
@@ -30,5 +35,8 @@ __all__ = [
     "REPORT_VERSION", "ExecutorReportService", "completion_evidence_from_report",
     "executor_report_from_dict", "report_fingerprint",
     "INTAKE_VERSION", "ChiefIntakeService", "content_intake_from_dict", "intake_fingerprint",
+    "JULIUS_CORRECTION_EXECUTOR_ID", "JULIUS_EXECUTOR_ID", "JULIUS_PROJECT_ID",
+    "JuliusIdleGuard", "JuliusIsolationError", "JuliusStatePaths", "agent_ops_records", "parse_episode_ledger",
+    "review_shadow_task", "run_read_only_shadow", "shadow_baseline",
     "decision_facts_from_dict", "task_from_dict",
 ]

@@ -30,6 +30,7 @@ Chief 是 AI Agent 运维总控系统 —— 独立于业务 Agent 的控制层�
 - Decision Policy 使用版本化确定性规则把任务判定为 READY、NEEDS_DECISION 或 BLOCKED；模型建议不能覆盖安全门禁。
 - 飞书 Owner Control Channel 通过企业自建应用长连接接收结构化决策与方向调整；白名单、过期、nonce 和 event_id 阻止越权与重放。
 - Lease Dispatcher 让授权执行器以唯一、可过期租约领取 READY 任务，并在基线漂移时拒绝提交。
+- Julius onboarding 提供独立的只读影子控制域；使用 `JUL-*`、专属执行器、数据库和审查状态，不复用 Panel 任务池。
 - 本地只读 API 提供 `/health`、`/api/projects`、`/api/runs`、`/api/findings`、`/api/reviews`、`/api/checks`、`/api/releases`、`/api/tasks`。
 
 ### 本地启动
@@ -82,6 +83,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 - `docs/DECISION_POLICY.md` —— TASK-016 确定性决策规则、模型边界与审计证据。
 - `docs/FEISHU_CONTROL_CHANNEL.md` —— TASK-017 Owner 控制通道、卡片字段、安全边界和启用步骤。
 - `docs/LEASE_DISPATCHER.md` —— TASK-018 租约协议、权限门禁、过期恢复与执行器边界。
+- `docs/julius/ONBOARDING.md` —— Julius 只读影子接入、任务映射和隔离边界。
 
 ## 冻结需求 Backlog
 
