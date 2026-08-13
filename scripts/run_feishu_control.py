@@ -55,7 +55,13 @@ def main() -> None:
         while not stop.wait(0.25):
             inbox.process_pending(limit=20)
             if time.monotonic() >= next_escalation_poll:
-                escalation_delivery.poll()
+                for result in escalation_delivery.poll():
+                    print(
+                        "Feishu escalation delivery: status={} event={}".format(
+                            result.get("status"), result.get("escalation_id") or result.get("file")
+                        ),
+                        flush=True,
+                    )
                 next_escalation_poll = time.monotonic() + 60
 
     threading.Thread(target=worker, name="feishu-control-worker", daemon=True).start()

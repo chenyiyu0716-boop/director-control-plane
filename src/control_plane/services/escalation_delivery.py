@@ -56,7 +56,9 @@ class EscalationDeliveryService:
                 nonce = secrets.token_urlsafe(24)
                 expires_at = (self.now() + timedelta(hours=24)).isoformat()
                 card = build_escalation_card(event, escalation_id, nonce, expires_at)
-                delivery_key = "{}-{}".format(escalation_id, count + 1)
+                delivery_key = hashlib.sha256(
+                    "{}:{}".format(escalation_id, count + 1).encode("utf-8")
+                ).hexdigest()[:32]
                 message_id = self.transport.send_card(self.owner_open_id, card, delivery_key)
                 timestamp = self.now().astimezone(timezone.utc).isoformat()
                 event.update({
@@ -73,6 +75,17 @@ class EscalationDeliveryService:
                 results.append({"escalation_id": escalation_id, "status": "sent",
                                 "reminder_count": count + 1})
             except Exception as error:
+                try:
+                    if path.is_file():
+                        failed_event = self._load(path)
+                        failed_event["delivery_status"] = "FAILED"
+                        failed_event["last_delivery_error"] = "{}: {}".format(
+                            type(error).__name__, str(error)
+                        )[:500]
+                        failed_event["last_delivery_attempt_at"] = self.now().astimezone(timezone.utc).isoformat()
+                        self._write(path, failed_event)
+                except Exception:
+                    pass
                 results.append({"file": path.name, "status": "failed",
                                 "error_type": type(error).__name__, "error": str(error)})
         return results

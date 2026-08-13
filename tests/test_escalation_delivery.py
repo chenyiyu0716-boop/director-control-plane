@@ -50,6 +50,7 @@ class EscalationDeliveryTest(unittest.TestCase):
         self.assertEqual(saved["reminder_count"], 1)
         self.assertEqual(len(saved["escalation_id"]), 64)
         self.assertEqual(saved["last_delivery_key"], self.transport.sent[0][2])
+        self.assertEqual(len(saved["last_delivery_key"]), 32)
         self.assertNotIn("nonce", saved)
 
         self.now += timedelta(hours=1)
@@ -91,6 +92,22 @@ class EscalationDeliveryTest(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(self.transport.sent, [])
+
+    def test_transport_failure_is_persisted_without_counting_a_reminder(self):
+        class FailingTransport:
+            def send_card(self, owner_open_id, card, idempotency_key):
+                raise RuntimeError("synthetic send failure")
+
+        path = self.write_event()
+        service = EscalationDeliveryService(
+            self.root, FailingTransport(), "ou_owner", now=lambda: self.now,
+        )
+        result = service.poll()[0]
+        self.assertEqual(result["status"], "failed")
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["delivery_status"], "FAILED")
+        self.assertIn("synthetic send failure", saved["last_delivery_error"])
+        self.assertEqual(saved.get("reminder_count", 0), 0)
 
     def test_identity_changes_cannot_target_an_event(self):
         self.write_event()
