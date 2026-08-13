@@ -119,6 +119,31 @@ class ReviewGateTest(unittest.TestCase):
             )
         self.assertEqual(self.repository.get_task("TASK-SECOND")["state"], "REVIEW")
 
+    def test_no_change_evidence_closes_read_only_tasks_without_fake_commit(self):
+        first, first_lease, first_criteria = self.completed_task("TASK-READ-ONLY-ONE")
+        second, second_lease, second_criteria = self.completed_task("TASK-READ-ONLY-TWO")
+        self.dispatcher.set_project_baseline("panel", "base-002", "planner")
+        for result, lease, criteria, request_id in (
+            (first, first_lease, first_criteria, "review-read-only-one"),
+            (second, second_lease, second_criteria, "review-read-only-two"),
+        ):
+            evidence = self.evidence(
+                result, lease, criteria, evidenceType="no_change", commitRef=None, changedFiles=[],
+            )
+            reviewed = self.gate.review(evidence, "reviewer", request_id)
+            self.assertEqual(reviewed["task"]["state"], "DONE")
+            self.assertEqual(reviewed["review"]["commit_ref"], "")
+
+    def test_no_change_evidence_rejects_commit_or_changed_files(self):
+        result, lease, criteria = self.completed_task("TASK-READ-ONLY-INVALID")
+        with self.assertRaisesRegex(ValueError, "commitRef must be empty"):
+            self.evidence(result, lease, criteria, evidenceType="no_change")
+        evidence = self.evidence(
+            result, lease, criteria, evidenceType="no_change", commitRef=None,
+        )
+        evaluation = self.gate.evaluate(evidence)
+        self.assertIn("fix.no_change_has_changed_files", evaluation["matchedRules"])
+
     def test_active_lease_and_malformed_evidence_are_rejected(self):
         task = self.registry.register(task_from_dict({
             "id": "TASK-ACTIVE", "projectId": "panel", "title": "Active",

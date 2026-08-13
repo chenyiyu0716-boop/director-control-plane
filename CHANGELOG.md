@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### TASK-020 — Read-only Shadow closeout
+
+- Added explicit `no_change` review evidence so read-only executor tasks can be accepted without fabricating commits.
+- Kept commit uniqueness and current-baseline enforcement for code-changing evidence while binding no-change evidence to its completed historical lease.
+- Reject no-change evidence that reports either a commit or changed files.
+
 ### TASK-018 — Lease-based Executor Dispatcher
 
 - Added executor profiles with project and risk ceilings, registered project baselines, and exclusive task leases.

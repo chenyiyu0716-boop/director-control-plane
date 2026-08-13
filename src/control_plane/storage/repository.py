@@ -58,9 +58,10 @@ class Repository:
             }
             if "commit_ref" not in review_columns:
                 connection.execute("ALTER TABLE task_review ADD COLUMN commit_ref TEXT")
+            connection.execute("DROP INDEX IF EXISTS idx_task_review_done_commit")
             connection.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_task_review_done_commit "
-                "ON task_review(commit_ref) WHERE outcome = 'DONE'"
+                "ON task_review(commit_ref) WHERE outcome = 'DONE' AND commit_ref IS NOT NULL AND commit_ref <> ''"
             )
 
     def upsert_project(self, project: ProjectConfig) -> None:
@@ -436,7 +437,7 @@ class Repository:
     def apply_review_result(self, task_id: str, task_version: int, outcome: str, gate_version: str,
                             reasons: List[str], matched_rules: List[str], evidence: Dict[str, Any],
                             evidence_fingerprint: str, executor_id: str, lease_id: str,
-                            baseline_ref: str, commit_ref: str, actor: str, request_id: str) -> Dict[str, Any]:
+                            baseline_ref: str, commit_ref: Optional[str], actor: str, request_id: str) -> Dict[str, Any]:
         """Persist a review-gate outcome; only a DONE outcome transitions the task."""
         now = utc_now()
         review_id = str(uuid.uuid4())
@@ -482,7 +483,7 @@ class Repository:
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (review_id, task_id, task_version, result_version, gate_version, outcome,
                      json_text(reasons), json_text(matched_rules), json_text(evidence),
-                     evidence_fingerprint, executor_id, lease_id, baseline_ref, commit_ref,
+                     evidence_fingerprint, executor_id, lease_id, baseline_ref, commit_ref or "",
                      actor, request_id, now),
                 )
             except sqlite3.IntegrityError as error:

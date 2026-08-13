@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS task_review (
   executor_id TEXT NOT NULL,
   lease_id TEXT NOT NULL,
   baseline_ref TEXT NOT NULL,
-  commit_ref TEXT NOT NULL,
+  commit_ref TEXT,
   actor TEXT NOT NULL,
   request_id TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL

@@ -20,6 +20,8 @@ EVIDENCE_FIELDS = (
     "taskId", "taskVersion", "baselineRef", "commitRef", "executorId", "leaseId",
     "acceptanceChecks", "testResults", "changedFiles", "riskFindings",
 )
+OPTIONAL_EVIDENCE_FIELDS = ("evidenceType",)
+EVIDENCE_TYPES = ("commit", "no_change")
 
 CHECK_STATUSES = ("pass", "fail")
 
@@ -99,20 +101,26 @@ def completion_evidence_from_dict(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Validate and normalize an executor completion-evidence document."""
     if not isinstance(payload, dict):
         raise TaskValidationError("completion evidence must be an object")
-    unknown = sorted(set(payload) - set(EVIDENCE_FIELDS))
+    unknown = sorted(set(payload) - set(EVIDENCE_FIELDS) - set(OPTIONAL_EVIDENCE_FIELDS))
     if unknown:
         raise TaskValidationError("unknown evidence fields: {}".format(", ".join(unknown)))
     missing = sorted(set(EVIDENCE_FIELDS) - set(payload))
     if missing:
         raise TaskValidationError("evidence is missing: {}".format(", ".join(missing)))
-    commit_ref = _required_text(payload["commitRef"], "commitRef").lower()
-    if not COMMIT_REF_PATTERN.fullmatch(commit_ref):
+    evidence_type = _required_text(payload.get("evidenceType", "commit"), "evidenceType")
+    if evidence_type not in EVIDENCE_TYPES:
+        raise TaskValidationError("evidenceType must be one of {}".format(", ".join(EVIDENCE_TYPES)))
+    raw_commit_ref = payload["commitRef"]
+    commit_ref = str(raw_commit_ref or "").strip().lower()
+    if evidence_type == "commit" and not COMMIT_REF_PATTERN.fullmatch(commit_ref):
         raise TaskValidationError("commitRef must be a 7-64 character hexadecimal Git object id")
-    return {
+    if evidence_type == "no_change" and commit_ref:
+        raise TaskValidationError("commitRef must be empty for no_change evidence")
+    evidence = {
         "taskId": _required_text(payload["taskId"], "taskId"),
         "taskVersion": _bounded_int(payload["taskVersion"], "taskVersion"),
         "baselineRef": _required_text(payload["baselineRef"], "baselineRef"),
-        "commitRef": commit_ref,
+        "commitRef": commit_ref or None,
         "executorId": _required_text(payload["executorId"], "executorId"),
         "leaseId": _required_text(payload["leaseId"], "leaseId"),
         "acceptanceChecks": _object_list(
@@ -126,6 +134,10 @@ def completion_evidence_from_dict(payload: Dict[str, Any]) -> Dict[str, Any]:
         "changedFiles": _path_list(payload["changedFiles"], "changedFiles"),
         "riskFindings": _category_list(payload["riskFindings"], "riskFindings"),
     }
+    # Preserve fingerprints for legacy commit evidence submitted before evidenceType existed.
+    if "evidenceType" in payload:
+        evidence["evidenceType"] = evidence_type
+    return evidence
 
 
 def evidence_fingerprint(evidence: Dict[str, Any], gate_version: str = GATE_VERSION) -> str:
@@ -225,10 +237,11 @@ class ReviewGate:
             add("fix.task_version_stale", "Evidence targets version {} but the task is at version {}.".format(
                 evidence["taskVersion"], task["version"]))
 
+        evidence_type = evidence.get("evidenceType", "commit")
         baseline = self.repository.get_project_baseline(task["project_id"])
         if baseline is None:
             add("fix.baseline_unknown", "Project baseline is not registered.")
-        elif baseline["baseline_ref"] != evidence["baselineRef"]:
+        elif evidence_type == "commit" and baseline["baseline_ref"] != evidence["baselineRef"]:
             add("fix.baseline_mismatch", "Evidence baseline does not match the registered project baseline.")
 
         lease = self.repository.get_task_lease(evidence["leaseId"])
@@ -266,6 +279,8 @@ class ReviewGate:
         if out_of_scope:
             add("fix.changed_file_out_of_scope",
                 "{} changed file(s) fall outside the authorized workspace roots.".format(len(out_of_scope)))
+        if evidence_type == "no_change" and evidence["changedFiles"]:
+            add("fix.no_change_has_changed_files", "No-change evidence cannot report changed files.")
         return rules, reasons
 
     @staticmethod
