@@ -8,10 +8,10 @@ from typing import Any, Dict, List
 from ..domain.models import TaskState
 from ..storage import Repository
 from .dispatcher import LeaseDispatcher
+from .project_isolation import JULIUS_PROJECT_ID
 from .task_registry import TaskRegistry
 
 
-JULIUS_PROJECT_ID = "julius"
 JULIUS_EXECUTOR_ID = "workbuddy-hy3-julius"
 JULIUS_CORRECTION_EXECUTOR_ID = "workbuddy-hy3-julius-correction"
 JULIUS_REVIEWER_ID = "julius-reviewer"
