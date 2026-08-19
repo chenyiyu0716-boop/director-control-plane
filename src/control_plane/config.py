@@ -33,6 +33,13 @@ class Settings:
     projects: List[ProjectConfig]
 
 
+def _resolve_from_base(base: Path, value: str) -> Path:
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (base / candidate).resolve()
+
+
 def load_settings(config_path: str = None) -> Settings:
     path = Path(config_path or os.environ.get("CONTROL_PLANE_CONFIG", "config/projects.local.json")).expanduser().resolve()
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -43,7 +50,7 @@ def load_settings(config_path: str = None) -> Settings:
         database = (base / database).resolve()
     projects = []
     for item in payload.get("projects", []):
-        root = Path(item["root"]).expanduser().resolve()
+        root = _resolve_from_base(base, item["root"])
         resolve_project_path = lambda value: (Path(value).expanduser() if Path(value).expanduser().is_absolute() else root / value).resolve()
         deployment_payload = item.get("deployment")
         deployment = None

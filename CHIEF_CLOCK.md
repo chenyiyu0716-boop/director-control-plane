@@ -26,15 +26,19 @@ launchd → cursor-agent --cwd <repo> --prompt HOURLY_LOOP.md
 
 Julius 仓内 `julius-workbuddy` 仍可当 **J3 产品执行器**（draft_build），那是运营入口，不是小时巡检 daemon。hy3 / `dispatch next` 仍冻。
 
-## Clock Proof Phase（当前）
+## Clock Proof Phase（今日里程碑：完成）
 
-P0 钟：12:10 / 12:40 / 13:10 看 on_time、exit、log 缺口。  
-P1 手：今日窗口保持开着（控制变量）。下一轮才测手消失 → stale。  
-P2 Chief：stale 只 WARNING，不重启、不改配置、不提交。
+P0 2026-08-19：11:40–13:10 连续 7 拍 `on_time=True`、exit 0、无 log 缺口。  
+P1：手过期时钟打 WARNING（Julius / Control Plane），未修复。  
+P2：Chief 未接管。
 
-12:10 成功标准：clock `on_time=True`；Director `status_age < 60min`；`able_to_read=True`。
+钟继续跑（launchd）。本窗不再当观察循环。
 
-通过后再进 **Agent Runner Phase**。
+## 下一阶段：Status Contract v1（先于换手）
+
+协议：`STATUS_CONTRACT.md`。三仓无论换哪个 agent 都只遵守该字段。**不进入 Agent Runner。**
+
+长期治理（QUEUED）：`CHIEF_GOVERNANCE.md` → D-EVOL、J-POS。
 
 指针：`/Users/pojian/chief-clock/`  
 LaunchAgent：`gui/501/com.pojian.chief-clock`

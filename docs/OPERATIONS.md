@@ -11,11 +11,22 @@ internal identifiers and are not renamed.
 
 ## Commands
 
+First-run after clone is observation of the two demo projects. It does not execute Julius or Director,
+does not register Julius tasks, and does not claim executor leases.
+
 ```bash
+chmod +x scripts/bootstrap_demo.sh
+./scripts/bootstrap_demo.sh
 export PYTHONPATH="$PWD/src"
-python3 -m control_plane.main --config config/projects.local.json init-db
-python3 -m control_plane.main --config config/projects.local.json run observer --project director-agent
-python3 -m control_plane.main --config config/projects.local.json run-all --trigger schedule
+python3 -m control_plane.main --config config/projects.example.json list project
+python3 -m control_plane.main --config config/projects.example.json list check_result
+python3 -m control_plane.main --config config/projects.example.json run observer --project director-agent
+python3 -m control_plane.main --config config/projects.example.json serve
+```
+
+Task mutations remain CLI-only. They are not part of the clone first-run:
+
+```bash
 python3 -m control_plane.main --config config/projects.local.json task register --file config/task.example.json --actor codex
 python3 -m control_plane.main --config config/projects.local.json task transition TASK-015 --to READY --expected-version 1 --actor codex --reason "planning approved"
 python3 -m control_plane.main --config config/projects.local.json task list --project control-panel
@@ -23,10 +34,6 @@ python3 -m control_plane.main --config config/projects.local.json task history T
 python3 -m control_plane.main --config config/projects.local.json task decide TASK-015 --facts config/decision-facts.example.json --expected-version 1 --actor codex
 python3 -m control_plane.main --config config/projects.local.json task decisions TASK-015
 python3 -m control_plane.main --config config/projects.local.json task render --project control-panel --output var/TASKS.md
-python3 -m control_plane.main --config config/projects.local.json dispatch register-executor workbuddy-hy3 --projects control-panel --max-risk low
-python3 -m control_plane.main --config config/projects.local.json dispatch set-baseline control-panel COMMIT_SHA --actor planner
-python3 -m control_plane.main --config config/projects.local.json dispatch next workbuddy-hy3
-python3 -m control_plane.main --config config/projects.local.json serve
 ```
 
 Task mutations are CLI-only in TASK-015. Every transition requires the expected version, actor and reason;
@@ -38,9 +45,11 @@ Decision facts use `config/decision-facts.schema.json`. A decision is applied on
 task and requires its expected version. `modelAdvisory` is optional, stored separately, and cannot alter the
 outcome. Read-only evidence is available at `/api/decisions` and `/api/tasks/{id}/decisions`.
 
-Dispatcher mutations are local CLI/service operations. Register a project baseline before claiming. Executors
-must use a fresh request ID per semantic operation and reuse it only to retry that same operation. Read-only
-state is available at `/api/executors`, `/api/baselines` and `/api/leases`. Completion enters REVIEW, never DONE.
+Dispatcher mutations are local CLI/service operations and are not the first-run path this period.
+Register a project baseline before claiming. Executors must use a fresh request ID per semantic
+operation and reuse it only to retry that same operation. Read-only state is available at
+`/api/executors`, `/api/baselines` and `/api/leases`. Completion enters REVIEW, never DONE.
+Julius stays isolated from this dispatcher. Do not register a Julius task or enable hy3 for this wrap.
 
 The API binds to `127.0.0.1:8765` by default. Do not bind it to a public interface until authentication,
 request auditing and deployment security have been implemented and reviewed.
