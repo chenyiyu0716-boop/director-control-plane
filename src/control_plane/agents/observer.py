@@ -1,6 +1,6 @@
 import time
 
-from ..adapters.git import git
+from ..adapters.git import git_at_root
 from ..adapters.deployment import evaluate_deployment, inspect_compose_runtime
 from ..config import ProjectConfig
 from ..domain.models import AgentResult, Check, Finding, RunStatus
@@ -14,7 +14,7 @@ class ObserverAgent:
         self._path_check(checks, findings, "ledger", "project-ledger", project.ledger)
         self._path_check(checks, findings, "status", "project-status", project.status)
         started = time.monotonic()
-        head = git(project.root, "rev-parse", "--short", "HEAD")
+        head = git_at_root(project.root, "rev-parse", "--short", "HEAD")
         latency = int((time.monotonic() - started) * 1000)
         git_status = "healthy" if head else "unknown"
         checks.append(Check("git", "repository-readable", git_status, {"head": head}, latency))

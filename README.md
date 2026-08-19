@@ -18,6 +18,8 @@ Chief 是 AI Agent 运维总控系统 —— 独立于业务 Agent 的控制层�
 
 架构语境中的「控制面 / control plane」仍指分层概念，不作为产品名使用。
 
+Chief 登记并只读观察 Julius 与 Director。它不替代两仓执行，不改两仓产品代码，本期也不启用 hy3 领取任务。
+
 ## 当前可运行闭环
 
 仓库已经具备第一条只读闭环：
@@ -32,23 +34,25 @@ Chief 是 AI Agent 运维总控系统 —— 独立于业务 Agent 的控制层�
 - Lease Dispatcher 让授权执行器以唯一、可过期租约领取 READY 任务，并在基线漂移时拒绝提交。
 - 本地只读 API 提供 `/health`、`/api/projects`、`/api/runs`、`/api/findings`、`/api/reviews`、`/api/checks`、`/api/releases`、`/api/tasks`。
 
-### 本地启动
+### 本地启动（clone 后第一段）
+
+clone 本仓即可观察两仓登记，不依赖本机 `~/repos/julius` 或 `~/repos/director` 热树。`config/projects.example.json` 指向本仓 `fixtures/demo-julius` 与 `fixtures/demo-director`。
 
 ```bash
-cp config/projects.example.json config/projects.local.json
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json init-db
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json run-all --trigger manual
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json task register --file config/task.example.json --actor codex
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json task decide TASK-015 --facts config/decision-facts.example.json --expected-version 1 --actor codex
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json task render --output var/TASKS.md
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch register-executor workbuddy-hy3 --projects control-panel --max-risk low
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch set-baseline control-panel COMMIT_SHA --actor planner
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch get-baseline control-panel
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json dispatch next workbuddy-hy3
-PYTHONPATH=src python3 -m control_plane.main --config config/projects.local.json serve
+PYTHONPATH=src python3 -m unittest discover -s tests -v
+chmod +x scripts/bootstrap_demo.sh
+./scripts/bootstrap_demo.sh
 ```
 
-服务默认只监听 `127.0.0.1:8765`，没有外网写入入口。
+`bootstrap_demo.sh` 只在 fixture 目录 `git init`（已 gitignore），写入 `var/demo-control-plane.sqlite3`，然后 `init-db`、`run-all`、列出 `julius` 与 `director-agent`。不写真实两仓，不 register 任务，不 dispatch。
+
+要把观察目标换成真实 checkout：复制 example 为 `config/projects.local.json`，把 `root` 改成绝对路径，并把 `database` 改成 `var/control-plane.sqlite3`。不要把领取执行器任务当作第一段。
+
+服务默认只监听 `127.0.0.1:8765`，没有外网写入入口：
+
+```bash
+PYTHONPATH=src python3 -m control_plane.main --config config/projects.example.json serve
+```
 
 飞书入口单独运行，真实配置和凭据不入库：
 

@@ -1,13 +1,13 @@
-from ..adapters.git import git, recent_commits
+from ..adapters.git import git_at_root, recent_commits
 from ..config import ProjectConfig
 from ..domain.models import AgentResult, Finding, RunStatus
 
 
 class ReleaseAgent:
     def run(self, project: ProjectConfig) -> AgentResult:
-        branch = git(project.root, "branch", "--show-current")
-        head = git(project.root, "rev-parse", "HEAD")
-        status = git(project.root, "status", "--short")
+        branch = git_at_root(project.root, "branch", "--show-current")
+        head = git_at_root(project.root, "rev-parse", "HEAD")
+        status = git_at_root(project.root, "status", "--short")
         commits = recent_commits(project.root)
         findings = []
         dirty = status is None or bool(status)

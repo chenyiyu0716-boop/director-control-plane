@@ -1,19 +1,26 @@
 {
-  "database": "var/control-plane.sqlite3",
+  "database": "var/demo-control-plane.sqlite3",
   "projects": [
+    {
+      "id": "julius",
+      "name": "Julius",
+      "kind": "business_agent",
+      "owner": "Project Owner",
+      "root": "fixtures/demo-julius",
+      "ledger": "docs/TASK_QUEUE.md",
+      "status": "docs/PROJECT_STATUS.json",
+      "knowledge_roots": ["docs"],
+      "enabled_agents": ["knowledge", "observer", "release"]
+    },
     {
       "id": "director-agent",
       "name": "Director Agent",
       "kind": "business_agent",
       "owner": "Project Owner",
-      "root": "/absolute/path/to/director",
-      "ledger": "docs/2026-08/TASK_QUEUE.md",
-      "status": "docs/2026-08/PROJECT_STATUS.json",
+      "root": "fixtures/demo-director",
+      "ledger": "docs/TASK_QUEUE.md",
+      "status": "docs/PROJECT_STATUS.json",
       "knowledge_roots": ["docs"],
-      "deployment": {
-        "composeProject": "director",
-        "requiredServices": ["backend", "frontend", "worker"]
-      },
       "enabled_agents": ["knowledge", "observer", "release"]
     }
   ]

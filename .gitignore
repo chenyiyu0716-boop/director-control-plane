@@ -33,3 +33,6 @@ __pycache__/
 config/projects.local.json
 config/*.local.json
 var/
+
+# Nested git metadata created by scripts/bootstrap_demo.sh
+fixtures/demo-*/.git/
